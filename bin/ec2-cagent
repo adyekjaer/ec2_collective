@@ -16,7 +16,6 @@ import pkg_resources
 import fcntl
 
 # Required to support threads
-from threading import Timer
 from threading import Thread
 from threading import active_count
 from Queue import Queue
@@ -47,7 +46,6 @@ CFILE='/etc/ec2_collective/ec2-cagent.json'
 task_queue = Queue()
 done_queue = Queue()
 yaml_queue = Queue()
-oldmsgs_queue = Queue()
 
 def terminate_process(signum, frame):
     logging.info ('Process asked to exit (SIGTERM) - exiting')
@@ -140,55 +138,59 @@ def write_yaml_to_queue ( message, sqs_facts_queue ):
     logging.debug('write_yaml_to_queue: Writing facts to sqs facts queue')
     write_sqs_msg (message, sqs_facts_queue)
 
-def get_yaml_facts ():
+def get_yaml_facts_worker ():
     logging.debug('get_yaml_facts: Loading facts')
     sqs_facts_queue = establish_sqs_conn(CFG['aws']['sqs_facts_queue'])
 
-    # Define dict for storage
-    dataMap = {}
-    valid_yaml_files = []
+    while True:
+        starttime=time.time()
+        # Define dict for storage
+        dataMap = {}
+        valid_yaml_files = []
 
-    yaml_files = CFG['general']['yaml_facts_path'].split(',')
-    for yaml_file in yaml_files:
+        yaml_files = CFG['general']['yaml_facts_path'].split(',')
+        for yaml_file in yaml_files:
 
-        if not os.path.exists(yaml_file):
-            logging.error( yaml_file + ' file does not exist')
-            continue
+            if not os.path.exists(yaml_file):
+                logging.error( yaml_file + ' file does not exist')
+                continue
 
-        # If we get to here - the file looks good
-        valid_yaml_files.append(yaml_file)
+            # If we get to here - the file looks good
+            valid_yaml_files.append(yaml_file)
 
-    for yaml_file in valid_yaml_files:
-        logging.debug('get_yaml_facts: Will load facts from ' + str(yaml_file))
+        for yaml_file in valid_yaml_files:
+            logging.debug('get_yaml_facts: Will load facts from ' + str(yaml_file))
 
-        f = open(yaml_file, 'r')
-        try:
-            data_from_file = yaml.safe_load(f)
-        except:
-            logging.error('Error while loading yaml from file (format problems) ' + str(yaml_file))
-            continue
+            f = open(yaml_file, 'r')
+            try:
+                data_from_file = yaml.safe_load(f)
+            except:
+                logging.error('Error while loading yaml from file (format problems) ' + str(yaml_file))
+                continue
 
-        if type(data_from_file) is str:
-            logging.debug('get_yaml_facts: Facts file looks to be string ' + str(yaml_file))
-            fact_string = data_from_file.split()
+            if type(data_from_file) is str:
+                logging.debug('get_yaml_facts: Facts file looks to be string ' + str(yaml_file))
+                fact_string = data_from_file.split()
 
-            for fact in fact_string:
-                newfact = {fact:'None'}
-                dataMap.update(newfact)
+                for fact in fact_string:
+                    newfact = {fact:'None'}
+                    dataMap.update(newfact)
+            else:
+                logging.debug('get_yaml_facts: We assume facts file is in yaml format ' + str(yaml_file))
+                dataMap.update(data_from_file)
+                f.close()
+
+        if len(dataMap) > 0:
+            logging.info('Facts loaded from file(s)')
+            logging.debug('get_yaml_facts:' + str(dataMap))
+            yaml_queue.put(dataMap)
+
+            if CFG['general']['use_facts_queue'] == True:
+                write_yaml_to_queue(dataMap, sqs_facts_queue)
         else:
-            logging.debug('get_yaml_facts: We assume facts file is in yaml format ' + str(yaml_file))
-            dataMap.update(data_from_file)
-            f.close()
+            logging.debug('get_yaml_facts: Facts are empty')
 
-    if len(dataMap) > 0:
-        logging.info('Facts loaded from file(s)')
-        logging.debug('get_yaml_facts:' + str(dataMap))
-        yaml_queue.put(dataMap)
-
-        if CFG['general']['use_facts_queue'] == True:
-            write_yaml_to_queue(dataMap, sqs_facts_queue)
-    else:
-        logging.debug('get_yaml_facts: Facts are empty')
+        time.sleep(sleeper(starttime, CFG['general']['yaml_facts_refresh']))
 
 def cli_mode (message):
 
@@ -303,59 +305,64 @@ def clean_old_msgs(read_msgs):
 
     return read_msgs
 
-def receive_sqs_msg ( yaml_facts ):
+def sleeper(starttime, interval):
+    now=time.time()
+    diff = (now - starttime)
+    logging.debug('sleeper: startime is %f, time now is %f, diff is %f, interval is %d' % (starttime, now, diff, interval))
+    if diff < interval:
+        logging.debug('sleeper: should sleep %f' % (interval - diff))
+        return (interval - diff )
+    else:
+        return 0
+
+def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
     sqs_read_queue = establish_sqs_conn(CFG['aws']['sqs_read_queue'])
 
-    try:
-        read_msgs = oldmsgs_queue.get(False)
-        read_msgs = clean_old_msgs(read_msgs)
-        logging.debug('receive_sqs_msg: Old received messages re-read')
-    except Empty:
-            logging.debug('receive_sqs_msg: oldmsgs queue is empty')
-            read_msgs = {}
+    while True:
+        starttime=time.time()
+        logging.debug('receive_sqs_msg: Looking for new messages on SQS')
 
-    logging.debug('receive_sqs_msg: Looking for new messages on SQS')
-
-    logging.info ('Attempting to get messages from SQS')
-    try:
+        logging.info ('Attempting to get messages from SQS')
         msgs = sqs_read_queue.get_messages(num_messages=10, visibility_timeout=0)
-    except:
-        logging.error('Receive sqs messages thread exiting...')
-        sys.exit(0)
-
-    logging.info ('Request messages from SQS success')
-
-    for msg in msgs:
-        if msg.id in read_msgs:
-            continue
-        else:
-            read_msgs[msg.id] = time.time()
-
-        message=json.loads(msg.get_body())
-        batch_msg_id = message['batch_msg_id']
-        wf = message['wf']
-        wof = message['wof']
-        message['orgid'] = msg.id
-
-        # We send multiple duplicate messages - lets avoid handling all of them
-        if batch_msg_id in read_msgs:
-            continue
-        else:
-            read_msgs[batch_msg_id] = time.time()
-
-        if fact_lookup(wf, wof, yaml_facts ):
-            logging.debug('receive_sqs_msg: SQS messages did not pass filter')
-            read_msgs[msg.id] = time.time()
+        try:
+            msgs = sqs_read_queue.get_messages(num_messages=10, visibility_timeout=0)
+        except:
+            logging.error('Attempt to receive sqs messages failed - sleeping and reconnecting...')
+            sleep(5)
+            sqs_read_queue = establish_sqs_conn(CFG['aws']['sqs_read_queue'])
             continue
 
-        logging.debug('receive_sqs_msg: New valid SQS message received')
+        logging.info ('Request messages from SQS success')
 
-        logging.debug('receive_sqs_msg: Putting SQS message on task queue')
-        task_queue.put(message)
+        for msg in msgs:
+            if msg.id in read_msgs:
+                continue
+            else:
+                read_msgs[msg.id] = time.time()
 
-    # End by putting all old messages on the queue
-    logging.debug('receive_sqs_msg: Putting received messages on oldmsgs queue')
-    oldmsgs_queue.put(read_msgs)
+            message=json.loads(msg.get_body())
+            batch_msg_id = message['batch_msg_id']
+            wf = message['wf']
+            wof = message['wof']
+            message['orgid'] = msg.id
+
+            # We send multiple duplicate messages - lets avoid handling all of them
+            if batch_msg_id in read_msgs:
+                continue
+            else:
+                read_msgs[batch_msg_id] = time.time()
+
+            if fact_lookup(wf, wof, yaml_facts ):
+                logging.debug('receive_sqs_msg: SQS messages did not pass filter')
+                read_msgs[msg.id] = time.time()
+                continue
+
+            logging.debug('receive_sqs_msg: New valid SQS message received')
+
+            logging.debug('receive_sqs_msg: Putting SQS message on task queue')
+            task_queue.put(message)
+
+        time.sleep(sleeper(starttime, CFG['general']['sqs_poll_interval']))
 
 def process_msg ( message ):
 
@@ -385,18 +392,6 @@ def process_msg ( message ):
 
     return response
 
-def receive_queue_msg ( ):
-
-    try:
-        message = task_queue.get(False)
-        logging.debug('receive_queue_msg: Task read from task queue')
-        done_queue.put(process_msg(message))
-    except Empty:
-            logging.debug('receive_queue_msg: Task queue is empty')
-    except:
-            logging.debug('receive_queue_msg: Unknown error in processing task queue')
-
-    logging.debug('receive_queue_msg: Worker ended - terminating')
 
 def write_sqs_msg (response, sqs_write_queue):
 
@@ -603,31 +598,38 @@ def fact_lookup (wf, wof, yaml_facts ):
         logging.debug('fact_lookup: Skip message - no wf match')
         return True
 
-def thread_worker():
-
-    thread = Thread(target = receive_queue_msg, args = ())
-    thread.daemon=True
-    thread.start()
-
-def check_task_queue():
+def check_task_queue_worker():
     logging.debug('check_task_queue: Checking task queue')
-    if task_queue.qsize() > 0:
-        thread_worker()
 
-def check_done_queue():
+    while True:
+        try:
+            message = task_queue.get(True)
+            logging.debug('receive_queue_msg: Task read from task queue')
+            # Fork thread here
+            done_queue.put(process_msg(message))
+        except Empty:
+            logging.debug('receive_queue_msg: Task queue is empty')
+            time.sleep(1)
+        except:
+            logging.debug('receive_queue_msg: Unknown error in processing task queue')
+            time.sleep(1)
+
+def check_done_queue_worker():
     logging.debug('check_done_queue: Checking done queue')
 
-    if done_queue.qsize() > 0:
+    while True:
         try:
-            response = done_queue.get(False)
+            response = done_queue.get(True)
             logging.debug('check_done_queue: Response read from done queue')
             sqs_write_queue = establish_sqs_conn(CFG['aws']['sqs_write_queue'])
             write_sqs_msg (response, sqs_write_queue)
 
         except Empty:
             logging.debug('check_done_queue: Done queue is empty')
+            time.sleep(1)
         except:
             logging.debug('check_done_queue: Unknown error in processing done queue')
+            time.sleep(1)
 
 def establish_sqs_conn (queue):
 
@@ -654,32 +656,57 @@ def establish_sqs_conn (queue):
 
 def main (yaml_facts=None, running_threads_last=0):
 
+    # maintain workers
+    workers=[]
+
     if CFG['general']['yaml_facts'] == True:
-        thread_get_yaml_facts = Timer(0, get_yaml_facts)
-        thread_get_yaml_facts.setDaemon(True)
-        thread_get_yaml_facts.start()
+        get_yaml_facts_worker_thread = Thread(target = get_yaml_facts_worker, args = ())
+        get_yaml_facts_worker_thread.daemon=True
+        get_yaml_facts_worker_thread.setName('get_yaml_facts_worker')
+        get_yaml_facts_worker_thread.start()
+        workers.append(get_yaml_facts_worker_thread)
 
         logging.info('main: Waiting for initial facts')
-        while yaml_facts is None:
-            if yaml_queue.qsize() > 0:
-                try:
-                    yaml_facts = yaml_queue.get(False)
-                except Empty:
-                    logging.debug('main: Yaml queue is empty')
-            time.sleep(1)
-        logging.info('main: populated initial facts')
+        try:
+            yaml_facts = yaml_queue.get(True, 5)
+        except Empty:
+            logging.error('main: Failed to get facts within 5 seconds')
+            sys.exit(1)
 
-    thread_receiver = Timer(CFG['general']['sqs_poll_interval'], receive_sqs_msg, (yaml_facts,))
-    thread_receiver.setDaemon(True)
-    thread_receiver.start()
+        if yaml_facts is None:
+            logging.error('main: run with yaml facts is set but nothing was found')
+            sys.exit(1)
+        else:
+            logging.info('main: populated initial facts')
 
-    thread_done_queue = Timer(CFG['general']['queue_poll_interval'], check_done_queue)
-    thread_done_queue.setDaemon(True)
-    thread_done_queue.start()
+    # Start 4 threads to handle facts, receive sql, done queue, task queue
+    receive_sqs_msg_worker_thread = Thread(target = receive_sqs_msg_worker, args = (yaml_facts,))
+    receive_sqs_msg_worker_thread.daemon=True
+    receive_sqs_msg_worker_thread.setName('receive_sqs_msg_worker')
+    try:
+        receive_sqs_msg_worker_thread.start()
+    except:
+        logging.error('main: failed ot start receive_sqs_msg_worker thread')
+        sys.exit(1)
+    workers.append(receive_sqs_msg_worker_thread)
 
-    thread_task_queue = Timer(CFG['general']['queue_poll_interval'], check_task_queue)
-    thread_task_queue.setDaemon(True)
-    thread_task_queue.start()
+    check_done_queue_worker_thread = Thread(target = check_done_queue_worker)
+    check_done_queue_worker_thread.setDaemon(True)
+    try:
+        check_done_queue_worker_thread.start()
+    except:
+        logging.error('main: failed ot start check_done_queue_worker thread')
+        sys.exit(1)
+    workers.append(check_done_queue_worker_thread)
+
+    check_task_queue_worker_thread = Thread(target = check_task_queue_worker)
+    check_task_queue_worker_thread.setDaemon(True)
+    try:
+        check_task_queue_worker_thread.start()
+    except:
+        logging.error('main: failed ot start check_done_queue_worker thread')
+        sys.exit(1)
+    workers.append(check_task_queue_worker_thread)
 
     try:
         while True:
@@ -688,58 +715,11 @@ def main (yaml_facts=None, running_threads_last=0):
                 running_threads_last = running_threads
                 logging.debug('main: ' + str(running_threads) + ' active threads')
 
-            if not thread_receiver.is_alive():
-                try:
-                    thread_receiver.join(0.1)
-                    thread_receiver = Timer(CFG['general']['sqs_poll_interval'], receive_sqs_msg, (yaml_facts,))
-                    thread_receiver.setDaemon(True)
-                    thread_receiver.start()
-                except RuntimeError:
-                    logging.error('main: RuntimeError in thread_receiver control')
-                except:
-                    logging.error('main: Uknown error in thread_receiver control')
+            for worker in workers:
+                if not worker.is_alive():
+                    logging.error('main: %s thread just died!' % (worker.name))
 
-            if not thread_done_queue.is_alive():
-                try:
-                    thread_done_queue.join(0.1)
-                    thread_done_queue = Timer(CFG['general']['queue_poll_interval'], check_done_queue)
-                    thread_done_queue.setDaemon(True)
-                    thread_done_queue.start()
-                except RuntimeError:
-                    logging.error('main: RuntimeError in thread_done_queue control')
-                except:
-                    logging.error('main: Uknown error in thread_done_queue control')
-
-            if not thread_task_queue.is_alive():
-                try:
-                    thread_task_queue.join(0.1)
-                    thread_task_queue = Timer(CFG['general']['queue_poll_interval'], check_task_queue)
-                    thread_task_queue.setDaemon(True)
-                    thread_task_queue.start()
-                except RuntimeError:
-                    logging.error('main: RuntimeError in thread_task_queue control')
-                except:
-                    logging.error('main: Uknown error in thread_task_queue control')
-
-            if CFG['general']['yaml_facts'] == True and not thread_get_yaml_facts.is_alive():
-                try:
-                    thread_get_yaml_facts.join(0.1)
-                    thread_get_yaml_facts = Timer(CFG['general']['yaml_facts_refresh'], get_yaml_facts)
-                    thread_get_yaml_facts.setDaemon(True)
-                    thread_get_yaml_facts.start()
-                except RuntimeError:
-                    logging.error('main: RuntimeError in thread_get_yaml_facts control')
-                except:
-                    logging.error('main: Uknown error in thread_get_yaml_facts control')
-
-                if yaml_queue.qsize() > 0:
-                    try:
-                        yaml_facts = yaml_queue.get(False)
-                    except Empty:
-                        logging.debug('main: Yaml queue is empty')
-
-            # Be nice on the cpu
-            time.sleep(CFG['general']['queue_poll_interval'])
+            time.sleep(5)
 
     except (KeyboardInterrupt, SystemExit):
         logging.info('Main loop caught interrupt...')
