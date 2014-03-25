@@ -497,7 +497,7 @@ def daemonize (foreground, pidfile, stdin='/dev/null', stdout='/dev/null', stder
         sys.exit(1)
     # Decouple from parent environment.
     os.chdir("/")
-    os.umask(0)
+    os.umask(022)
     os.setsid( )
     # Perform second fork.
     try:
