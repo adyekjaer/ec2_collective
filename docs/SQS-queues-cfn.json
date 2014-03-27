@@ -49,29 +49,29 @@
   },
 
   "Outputs": {
-    "QueueURL": {
+    "MasterQueueURL": {
       "Description": "URL of the Master SQS Queue",
       "Value": { "Ref": "MasterQueue" }
     },
-    "QueueARN": {
+    "MasterQueueARN": {
       "Description": "ARN of the Master SQS Queue",
       "Value": { "Fn::GetAtt": [ "MasterQueue", "Arn" ] }
     },
 
-    "QueueURL": {
+    "AgentQueueURL": {
       "Description": "URL of the Agent SQS Queue",
       "Value": { "Ref": "AgentQueue" }
     },
-    "QueueARN": {
+    "AgentQueueARN": {
       "Description": "ARN of the Agent SQS Queue",
       "Value": { "Fn::GetAtt": [ "AgentQueue", "Arn" ] }
     },
 
-    "QueueURL": {
+    "FactsQueueURL": {
       "Description": "URL of the Facts SQS Queue",
       "Value": { "Ref": "FactsQueue" }
     },
-    "QueueARN": {
+    "FactsQueueARN": {
       "Description": "ARN of the Facts SQS Queue",
       "Value": { "Fn::GetAtt": [ "FactsQueue", "Arn" ] }
     }
