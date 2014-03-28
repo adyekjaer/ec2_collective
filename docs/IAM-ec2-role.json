@@ -1,0 +1,65 @@
+{
+   "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters" : {
+    "QueuePrefix" : {
+      "Description" : "Namespace of queues to allow access to (testing -> testing_QUEUE_NAME)",
+      "Type" : "String",
+      "MinLength": "1",
+      "MaxLength": "80",
+      "AllowedPattern": "[a-zA-Z0-9]+",
+      "ConstraintDescription": "must be a valid queue name, alphanumeric characters only."
+    }
+	},
+
+   "Resources": {
+      "Ec2Cagent": {
+         "Type": "AWS::IAM::Role",
+         "Properties": {
+            "AssumeRolePolicyDocument": {
+               "Version" : "2012-10-17",
+               "Statement": [ {
+                  "Effect": "Allow",
+                  "Principal": {
+                     "Service": [ "ec2.amazonaws.com" ]
+                  },
+                  "Action": [ "sts:AssumeRole" ]
+               } ]
+            },
+            "Path": "/",
+            "Policies": [ {
+               "PolicyName": "ec2cagent",
+               "PolicyDocument": {
+                  "Version" : "2012-10-17",
+                  "Statement": [ {
+                     "Effect": "Allow",
+                     "Action": [
+                               "sqs:GetQueueAttributes",
+                               "sqs:GetQueueUrl",
+                               "sqs:ListQueues",
+                               "sqs:ChangeMessageVisibility",
+                               "sqs:ChangeMessageVisibilityBatch",
+                               "sqs:SendMessage",
+                               "sqs:SendMessageBatch"
+							   ],
+                     "Resource" : [ {
+                               "Fn::Join": ["", ["arn:aws:sqs:*:*:", {"Ref" : "QueuePrefix"}, "_facts"]] },
+                                { "Fn::Join": ["", ["arn:aws:sqs:*:*:", {"Ref" : "QueuePrefix"}, "_agent"]]
+                                 } ]
+								  
+						        } ]
+               }
+               } ]
+            }
+         },
+
+         "Ec2CagentInstanceProfile": {
+         "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [ {
+               "Ref": "Ec2Cagent"
+            } ]
+         }
+      }
+   }
+}
