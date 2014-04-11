@@ -36,14 +36,8 @@ from boto.sqs.connection import SQSConnection
 from boto.sqs.regioninfo import SQSRegionInfo
 from boto.sqs import connect_to_region
 
-try:
-    if int(Version[0:1]) < 2:
-        sys.exit(1)
-except SystemExit:
+if int(Version[0:1]) < 2:
     sys.stderr.write('Boto >= 2.0 is required %s found - exiting\n' % (Version))
-    sys.exit(1)
-except:
-    sys.stderr.write('Unable to determine version of Boto - exiting\n')
     sys.exit(1)
 
 # Programatically set boto timeout
