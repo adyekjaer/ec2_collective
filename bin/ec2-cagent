@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from socket import gethostname, setdefaulttimeout
-import simplejson as json
+import json
 import subprocess
 import time
 import signal
@@ -12,7 +12,6 @@ import os
 import stat
 import getopt
 import logging
-import pkg_resources
 import fcntl
 
 # Required to support threads
@@ -21,21 +20,26 @@ from threading import active_count
 from Queue import Queue
 from Queue import Empty
 
-# S3 stuff
-from boto.s3.key import Key
-from boto.s3.connection import S3Connection
-from boto.exception import S3ResponseError
-
 # SQS stuff
 from boto.sqs.connection import SQSConnection
 from boto.sqs.regioninfo import SQSRegionInfo
 from boto.sqs import connect_to_region
 
+from boto import Version, config
+
 try:
-    pkg_resources.require("Boto>=2.0")
-except pkg_resources.VersionConflict, e:
-    sys.stderr.write('Boto 2.0 or higher is required - exiting\n')
+    if int(Version[0:1]) < 2:
+        sys.exit(1)
+except SystemExit:
+    sys.stderr.write('Boto >= 2.0 is required %s found - exiting\n' % (Version))
     sys.exit(1)
+except:
+    sys.stderr.write('Unable to determine version of Boto - exiting\n')
+    sys.exit(1)
+
+# Programatically set boto timeout
+config.add_section('Boto') 
+config.set('Boto','http_socket_timeout','30') 
 
 # Set a default timeout on all socket requests
 setdefaulttimeout(60)
@@ -222,43 +226,9 @@ def write_to_file (payload, identifier):
 
     return (True, script_file)
 
-def fetch_s3_file ( s3_path, identifier ):
-
-    bucket_name=os.path.dirname(s3_path)
-    file_name=os.path.basename(s3_path)
-
-    logging.debug ('fetch_s3_file: Fetching script ' + file_name + ' from s3 bucket ' + bucket_name )
-
-    try:
-        s3conn =S3Connection()
-    except S3ResponseError:
-        logging.error ('Failed to connect to S3')
-        return (False, 'Failed to connect to S3')
-
-    try:
-        bucket = s3conn.get_bucket(bucket_name)
-    except S3ResponseError:
-        logging.error ('Failed to get bucket ' + bucket_name )
-        return (False, 'Failed to get bucket ' + bucket_name )
-
-    k = Key(bucket)
-    k.key = file_name
-
-    try:
-        payload = k.get_contents_as_string()
-    except S3ResponseError, e:
-        logging.error ('Failed to get file from bucket ' + str(e))
-        return (False, 'Failed to get file from bucket')
-
-    return write_to_file(payload, identifier )
-
 def script_mode (message):
 
-    # Put script on filesystem
-    if message['mode'] == 's3':
-        (file_written, script_file ) = fetch_s3_file(message['cmd'], message['batch_msg_id'])
-    else:
-        (file_written, script_file ) = write_to_file(message['payload'], message['batch_msg_id'])
+    (file_written, script_file ) = write_to_file(message['payload'], message['batch_msg_id'])
 
     if file_written is False:
         # script_file will include error message
@@ -382,7 +352,7 @@ def process_msg ( message ):
     if mode == 'cli':
         logging.info("Performing command execution")
         response = cli_mode(message)
-    elif mode in [ 'script', 's3' ]:
+    elif mode in [ 'script' ]:
         logging.info('Performing ' + mode + ' execution')
         response = script_mode (message)
     else:
