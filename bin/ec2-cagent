@@ -7,7 +7,6 @@ import subprocess
 import time
 import signal
 import sys
-import yaml
 import os
 import stat
 import getopt
@@ -20,21 +19,25 @@ from threading import active_count
 from Queue import Queue
 from Queue import Empty
 
+try:
+    import yaml
+except ImportError:
+    print 'yaml module not found - please install pyyaml - exiting'
+    sys.exit(1)
+
+try:
+    from boto import Version, config
+except ImportError:
+    print 'Boto module not found - please install boto - exiting'
+    sys.exit(1)
+
 # SQS stuff
 from boto.sqs.connection import SQSConnection
 from boto.sqs.regioninfo import SQSRegionInfo
 from boto.sqs import connect_to_region
 
-from boto import Version, config
-
-try:
-    if int(Version[0:1]) < 2:
-        sys.exit(1)
-except SystemExit:
+if int(Version[0:1]) < 2:
     sys.stderr.write('Boto >= 2.0 is required %s found - exiting\n' % (Version))
-    sys.exit(1)
-except:
-    sys.stderr.write('Unable to determine version of Boto - exiting\n')
     sys.exit(1)
 
 # Programatically set boto timeout
@@ -181,8 +184,15 @@ def get_yaml_facts_worker ():
                     dataMap.update(newfact)
             else:
                 logging.debug('get_yaml_facts: We assume facts file is in yaml format ' + str(yaml_file))
-                dataMap.update(data_from_file)
-                f.close()
+                try: 
+                    dataMap.update(data_from_file)
+                    f.close()
+                except ValueError, yamlerr:
+                    logging.error('Failed to load yaml file %s (%s)' % (yaml_file, yamlerr))
+                    break
+                except:
+                    logging.error('Failed to load yaml file')
+                    break
 
         if len(dataMap) > 0:
             logging.info('Facts loaded from file(s)')
