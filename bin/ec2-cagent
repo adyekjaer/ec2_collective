@@ -65,13 +65,13 @@ def usage():
     sys.stderr.write('\t' + sys.argv[0] + '\n\n -f, --foreground\trun script in foreground\n -h, --help\tthis help\n -l, --logfile\tlogfile path ( /var/log/ec2_collective/ec2-cagent.log )\n -p, --pidfile\tpath to pidfile (/var/run/ec2-cagent.pid)\n')
     sys.exit(1)
 
-def set_logging(logfile, foreground):
+def set_logging(logfile, foreground, supervisor):
 
     log = logging.getLogger()
     logging.getLogger('boto').setLevel(logging.CRITICAL)
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
-    if foreground is True:
+    if foreground is True and supervisor is not True:
         ch  = logging.StreamHandler(sys.stdout)
         ch.setFormatter(fmt)
         log.addHandler(ch)
@@ -110,10 +110,10 @@ def acquire_lock(pidfile):
         sys.stderr.write('Unable to acquire lockfile: ' + str(pidfile) + ' (' + str(err) + ')\n')
         sys.exit(1)
 
-def initialize(logfile='/var/log/ec2_collective/ec2-cagent.log', pidfile='/var/run/ec2-cagent.pid', foreground=False):
+def initialize(logfile='/var/log/ec2_collective/ec2-cagent.log', pidfile='/var/run/ec2-cagent.pid', foreground=False, supervisor=False):
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hfl:p:', ['foreground', 'help', 'logfile', 'pidfile'])
+        opts, args = getopt.getopt(sys.argv[1:], 'hfsl:p:', ['foreground', 'supervisor', 'help', 'logfile', 'pidfile'])
 
     except getopt.GetoptError, err:
         sys.stderr.write('Failed to parse arguments: (%s)\n' % (err))
@@ -124,13 +124,16 @@ def initialize(logfile='/var/log/ec2_collective/ec2-cagent.log', pidfile='/var/r
             usage()
         elif o in ('-f', '--foreground'):
             foreground=True
+        elif o in ('-s', '--supervirsor'):
+            supervisor=True
+            foreground=True
         elif o in ('-l', '--logfile'):
             logfile=a
         elif o in ('-p', '--pidfile'):
             pidfile=a
 
     get_config()
-    set_logging(logfile,foreground)
+    set_logging(logfile,foreground, supervisor)
 
     stdoutlog = os.path.dirname(logfile) + '/ec2-cagent.stdout'
     stderrlog = os.path.dirname(logfile) + '/ec2-cagent.stderr'
