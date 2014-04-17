@@ -62,7 +62,7 @@ signal.signal(signal.SIGTERM, terminate_process)
 
 def usage():
     sys.stderr.write('Usage:')
-    sys.stderr.write('\t' + sys.argv[0] + '\n\n -f, --foreground\trun script in foreground\n -h, --help\tthis help\n -l, --logfile\tlogfile path ( /var/log/ec2_collective/ec2-cagent.log )\n -p, --pidfile\tpath to pidfile (/var/run/ec2-cagent.pid)\n')
+    sys.stderr.write('\t' + sys.argv[0] + '\n\n -f, --foreground\trun script in foreground\n -h, --help\tthis help\n -l, --logfile\tlogfile path ( /var/log/ec2_collective/ec2-cagent.log )\n -p, --pidfile\tpath to pidfile (/var/run/ec2_collective/ec2-cagent.pid)\n')
     sys.exit(1)
 
 def set_logging(logfile, foreground, supervisor):
@@ -110,7 +110,7 @@ def acquire_lock(pidfile):
         sys.stderr.write('Unable to acquire lockfile: ' + str(pidfile) + ' (' + str(err) + ')\n')
         sys.exit(1)
 
-def initialize(logfile='/var/log/ec2_collective/ec2-cagent.log', pidfile='/var/run/ec2-cagent.pid', foreground=False, supervisor=False):
+def initialize(logfile='/var/log/ec2_collective/ec2-cagent.log', pidfile='/var/run/ec2_collective/ec2-cagent.pid', foreground=False, supervisor=False):
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hfsl:p:', ['foreground', 'supervisor', 'help', 'logfile', 'pidfile'])
