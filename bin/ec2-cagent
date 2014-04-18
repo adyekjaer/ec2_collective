@@ -69,7 +69,7 @@ def set_logging(logfile, foreground, supervisor):
 
     log = logging.getLogger()
     logging.getLogger('boto').setLevel(logging.CRITICAL)
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(funcName)s: %(message)s")
 
     if foreground is True and supervisor is not True:
         ch  = logging.StreamHandler(sys.stdout)
@@ -145,11 +145,11 @@ def write_yaml_to_queue ( message, sqs_facts_queue ):
     # Make sure the facts message contains a hostname
     message.update({ 'ec2_cagent_hostname' : gethostname() })
 
-    logging.debug('write_yaml_to_queue: Writing facts to sqs facts queue')
+    logging.debug('Writing facts to sqs facts queue')
     write_sqs_msg (message, sqs_facts_queue)
 
 def get_yaml_facts_worker ():
-    logging.debug('get_yaml_facts: Loading facts')
+    logging.debug('Loading facts')
     sqs_facts_queue = establish_sqs_conn(CFG['aws']['sqs_facts_queue'])
 
     while True:
@@ -169,7 +169,7 @@ def get_yaml_facts_worker ():
             valid_yaml_files.append(yaml_file)
 
         for yaml_file in valid_yaml_files:
-            logging.debug('get_yaml_facts: Will load facts from ' + str(yaml_file))
+            logging.debug('Will load facts from ' + str(yaml_file))
 
             f = open(yaml_file, 'r')
             try:
@@ -179,14 +179,14 @@ def get_yaml_facts_worker ():
                 continue
 
             if type(data_from_file) is str:
-                logging.debug('get_yaml_facts: Facts file looks to be string ' + str(yaml_file))
+                logging.debug('Facts file looks to be string ' + str(yaml_file))
                 fact_string = data_from_file.split()
 
                 for fact in fact_string:
                     newfact = {fact:'None'}
                     dataMap.update(newfact)
             else:
-                logging.debug('get_yaml_facts: We assume facts file is in yaml format ' + str(yaml_file))
+                logging.debug('We assume facts file is in yaml format ' + str(yaml_file))
                 try: 
                     dataMap.update(data_from_file)
                     f.close()
@@ -199,20 +199,20 @@ def get_yaml_facts_worker ():
 
         if len(dataMap) > 0:
             logging.info('Facts loaded from file(s)')
-            logging.debug('get_yaml_facts:' + str(dataMap))
+            logging.debug(str(dataMap))
             yaml_queue.put(dataMap)
 
             if CFG['general']['use_facts_queue'] == True:
                 write_yaml_to_queue(dataMap, sqs_facts_queue)
         else:
-            logging.debug('get_yaml_facts: Facts are empty')
+            logging.debug('Facts are empty')
 
         time.sleep(sleeper(starttime, CFG['general']['yaml_facts_refresh']))
 
 def cli_mode (message):
 
     try:
-        logging.debug ('cli_mode: Executing: ' + str(message['cmd']))
+        logging.debug ('Executing: ' + str(message['cmd']))
         o = subprocess.Popen(message['cmd'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
         output = o.communicate()[0]
         rc = o.poll()
@@ -255,7 +255,7 @@ def script_mode (message):
         command = str(command) + ' ' + str(message['script_param'])
 
     try:
-        logging.debug ('script_mode: Executing script: ' + str(message['cmd']) + ' with params: ' + str(message['script_param']))
+        logging.debug ('Executing script: ' + str(message['cmd']) + ' with params: ' + str(message['script_param']))
         o = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
         output = o.communicate()[0]
         rc = o.poll()
@@ -266,7 +266,7 @@ def script_mode (message):
         rc = e.errno
 
     try:
-        logging.debug ('script_mode: Deleting file with script '  + script_file)
+        logging.debug ('Deleting file with script '  + script_file)
         os.remove(script_file)
     except OSError, e:
         logging.error ('Failed to delete script file ' + script_file + ' (%d) %s \n' % (e.errno, e.strerror))
@@ -283,7 +283,7 @@ def clean_old_msgs(read_msgs):
 
     for id, lastseen in read_msgs.items():
         if lastseen < (time.time() - 120 ):
-            logging.debug('clean_old_msgs: removing old message')
+            logging.debug('removing old message')
             del read_msgs[id]
 
     return read_msgs
@@ -291,9 +291,9 @@ def clean_old_msgs(read_msgs):
 def sleeper(starttime, interval):
     now=time.time()
     diff = (now - starttime)
-    logging.debug('sleeper: startime is %f, time now is %f, diff is %f, interval is %d' % (starttime, now, diff, interval))
+    logging.debug('Startime is %f, time now is %f, diff is %f, interval is %d' % (starttime, now, diff, interval))
     if diff < interval:
-        logging.debug('sleeper: should sleep %f' % (interval - diff))
+        logging.debug('Should sleep %f' % (interval - diff))
         return (interval - diff )
     else:
         return 0
@@ -303,7 +303,7 @@ def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
 
     while True:
         starttime=time.time()
-        logging.debug('receive_sqs_msg: Looking for new messages on SQS')
+        logging.debug('Looking for new messages on SQS')
 
         logging.info ('Attempting to get messages from SQS')
         msgs = sqs_read_queue.get_messages(num_messages=10, visibility_timeout=0)
@@ -336,13 +336,13 @@ def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
                 read_msgs[batch_msg_id] = time.time()
 
             if fact_lookup(wf, wof, yaml_facts ):
-                logging.debug('receive_sqs_msg: SQS messages did not pass filter')
+                logging.debug('SQS messages did not pass filter')
                 read_msgs[msg.id] = time.time()
                 continue
 
-            logging.debug('receive_sqs_msg: New valid SQS message received')
+            logging.debug('New valid SQS message received')
 
-            logging.debug('receive_sqs_msg: Putting SQS message on task queue')
+            logging.debug('Putting SQS message on task queue')
             task_queue.put(message)
 
         time.sleep(sleeper(starttime, CFG['general']['sqs_poll_interval']))
@@ -384,7 +384,7 @@ def write_sqs_msg (response, sqs_write_queue):
 
     try:
         response_in_json=json.dumps(response)
-        logging.debug ('write_sqs_msg: Response size in json ' + str(len(response_in_json)))
+        logging.debug ('Response size in json ' + str(len(response_in_json)))
         message = sqs_write_queue.new_message(response_in_json)
     except:
         logging.error('Failed to create message object - check queue name')
@@ -402,7 +402,7 @@ def write_sqs_msg (response, sqs_write_queue):
 
         try:
             response_in_json=json.dumps(response)
-            logging.debug ('write_sqs_msg: Response size in json ' + str(len(response_in_json)))
+            logging.debug ('Response size in json ' + str(len(response_in_json)))
             message = sqs_write_queue.new_message(response_in_json)
         except:
             logging.error('Failed to create message object - check queue name')
@@ -425,7 +425,7 @@ def write_sqs_msg (response, sqs_write_queue):
             time.sleep(1)
         else:
             logging.info ('Write to SQS success')
-            logging.debug('write_sqs_msg: Wrote response to SQS')
+            logging.debug('Wrote response to SQS')
             return True
 
     return False
@@ -521,10 +521,10 @@ def fact_lookup (wf, wof, yaml_facts ):
     # If yaml facts is false
     if CFG['general']['yaml_facts'] == False:
         if wf is None and wof is None:
-            logging.debug('fact_lookup: Process message - yaml_facts is False and message contains no facts')
+            logging.debug('Process message - yaml_facts is False and message contains no facts')
             return False
         else:
-            logging.debug('fact_lookup: Skip message - yaml_facts is False but message contains facts')
+            logging.debug('Skip message - yaml_facts is False but message contains facts')
             return True
 
     # If yaml facts is true
@@ -536,7 +536,7 @@ def fact_lookup (wf, wof, yaml_facts ):
 
         # If nothing is set we process message
         if wf is None and wof is None:
-            logging.debug('fact_lookup: Process message - yaml_facts is True but message contains no facts')
+            logging.debug('Process message - yaml_facts is True but message contains no facts')
             return False
 
     # If wof is in facts we return True ( skip message )
@@ -547,16 +547,16 @@ def fact_lookup (wf, wof, yaml_facts ):
                 f = f.split('=')
 
                 if (f[0] in yaml_facts) and (yaml_facts[f[0]] == f[1]):
-                    logging.debug('fact_lookup: Skip message - wof matched')
+                    logging.debug('Skip message - wof matched')
                     return True
             else:
                 if f in yaml_facts:
-                    logging.debug('fact_lookup: Skip message - wof matched')
+                    logging.debug('Skip message - wof matched')
                     return True
 
     # Without is set but we did not find it, if wf is not set we return False ( process message )
     if wf is None:
-        logging.debug('fact_lookup: Process message - no wof match and no wf')
+        logging.debug('Process message - no wof match and no wf')
         return False
 
     # If all wf is in facts we return False ( process message )
@@ -574,44 +574,44 @@ def fact_lookup (wf, wof, yaml_facts ):
 
     if no_match == 0 :
         # All facts was found ( process message )
-        logging.debug('fact_lookup: Process message - wf matched')
+        logging.debug('Process message - wf matched')
         return False
     else:
         # Facts set was not found - return True ( skip message )
-        logging.debug('fact_lookup: Skip message - no wf match')
+        logging.debug('Skip message - no wf match')
         return True
 
 def check_task_queue_worker():
-    logging.debug('check_task_queue: Checking task queue')
+    logging.debug('Checking task queue')
 
     while True:
         try:
             message = task_queue.get(True)
-            logging.debug('receive_queue_msg: Task read from task queue')
+            logging.debug('Task read from task queue')
             # Fork thread here
             done_queue.put(process_msg(message))
         except Empty:
-            logging.debug('receive_queue_msg: Task queue is empty')
+            logging.debug('Task queue is empty')
             time.sleep(1)
         except:
-            logging.debug('receive_queue_msg: Unknown error in processing task queue')
+            logging.debug('Unknown error in processing task queue')
             time.sleep(1)
 
 def check_done_queue_worker():
-    logging.debug('check_done_queue: Checking done queue')
+    logging.debug('Checking done queue')
 
     while True:
         try:
             response = done_queue.get(True)
-            logging.debug('check_done_queue: Response read from done queue')
+            logging.debug('Response read from done queue')
             sqs_write_queue = establish_sqs_conn(CFG['aws']['sqs_write_queue'])
             write_sqs_msg (response, sqs_write_queue)
 
         except Empty:
-            logging.debug('check_done_queue: Done queue is empty')
+            logging.debug('Done queue is empty')
             time.sleep(1)
         except:
-            logging.debug('check_done_queue: Unknown error in processing done queue')
+            logging.debug('Unknown error in processing done queue')
             time.sleep(1)
 
 def establish_sqs_conn (queue):
@@ -649,18 +649,18 @@ def main (yaml_facts=None, running_threads_last=0):
         get_yaml_facts_worker_thread.start()
         workers.append(get_yaml_facts_worker_thread)
 
-        logging.info('main: Waiting for initial facts')
+        logging.info('Waiting for initial facts')
         try:
             yaml_facts = yaml_queue.get(True, 5)
         except Empty:
-            logging.error('main: Failed to get facts within 5 seconds')
+            logging.error('Failed to get facts within 5 seconds')
             sys.exit(1)
 
         if yaml_facts is None:
-            logging.error('main: run with yaml facts is set but nothing was found')
+            logging.error('Run with yaml facts is set but nothing was found')
             sys.exit(1)
         else:
-            logging.info('main: populated initial facts')
+            logging.info('Populated initial facts')
 
     # Start 4 threads to handle facts, receive sql, done queue, task queue
     receive_sqs_msg_worker_thread = Thread(target = receive_sqs_msg_worker, args = (yaml_facts,))
@@ -669,7 +669,7 @@ def main (yaml_facts=None, running_threads_last=0):
     try:
         receive_sqs_msg_worker_thread.start()
     except:
-        logging.error('main: failed ot start receive_sqs_msg_worker thread')
+        logging.error('Failed ot start receive_sqs_msg_worker thread')
         sys.exit(1)
     workers.append(receive_sqs_msg_worker_thread)
 
@@ -678,7 +678,7 @@ def main (yaml_facts=None, running_threads_last=0):
     try:
         check_done_queue_worker_thread.start()
     except:
-        logging.error('main: failed ot start check_done_queue_worker thread')
+        logging.error('Failed ot start check_done_queue_worker thread')
         sys.exit(1)
     workers.append(check_done_queue_worker_thread)
 
@@ -687,7 +687,7 @@ def main (yaml_facts=None, running_threads_last=0):
     try:
         check_task_queue_worker_thread.start()
     except:
-        logging.error('main: failed ot start check_done_queue_worker thread')
+        logging.error('Failed ot start check_done_queue_worker thread')
         sys.exit(1)
     workers.append(check_task_queue_worker_thread)
 
@@ -696,11 +696,11 @@ def main (yaml_facts=None, running_threads_last=0):
             running_threads = active_count()
             if running_threads != running_threads_last:
                 running_threads_last = running_threads
-                logging.debug('main: ' + str(running_threads) + ' active threads')
+                logging.debug(str(running_threads) + ' active threads')
 
             for worker in workers:
                 if not worker.is_alive():
-                    logging.error('main: %s thread just died!' % (worker.name))
+                    logging.error('%s thread just died!' % (worker.name))
 
             time.sleep(5)
 
