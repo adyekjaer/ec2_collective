@@ -319,6 +319,7 @@ def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
 
         for msg in msgs:
             if msg.id in read_msgs:
+                logging.debug('Message already read')
                 continue
             else:
                 read_msgs[msg.id] = time.time()
@@ -331,6 +332,7 @@ def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
 
             # We send multiple duplicate messages - lets avoid handling all of them
             if batch_msg_id in read_msgs:
+                logging.debug('Message already read')
                 continue
             else:
                 read_msgs[batch_msg_id] = time.time()
@@ -356,7 +358,7 @@ def process_msg ( message ):
     if mode in ['ping', 'count']:
         logging.info('Performing ' + str(mode) + ' reply')
         response={'mode': mode, 'output': ts, 'rc': '0', 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname()};
-        return response
+        done_queue.put(response)
     else:
         logging.info("Performing ping reply - for discovery purpose")
         response={'mode': 'ping', 'output': ts, 'rc': '0', 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname(), 'discovery':1};
@@ -373,8 +375,9 @@ def process_msg ( message ):
         response =  'Unknown command ' + cmd_str
         response={'mode': mode, 'output': response, 'rc': '0', 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname()};
 
-    return response
+    done_queue.put(response)
 
+    return
 
 def write_sqs_msg (response, sqs_write_queue):
 
@@ -419,7 +422,7 @@ def write_sqs_msg (response, sqs_write_queue):
             org = sqs_write_queue.write(message)
         except:
             logging.error('Failed to write to sqs - quitting thread')
-            sys.exit(0)
+            sys.exit(1)
         if org.id is None:
             logging.error ('Failed to write response message to SQS')
             time.sleep(1)
@@ -583,19 +586,43 @@ def fact_lookup (wf, wof, yaml_facts ):
 
 def check_task_queue_worker():
     logging.debug('Checking task queue')
+    cmd_workers=[]
 
     while True:
         try:
-            message = task_queue.get(True)
+            message = task_queue.get(True, 30)
             logging.debug('Task read from task queue')
-            # Fork thread here
-            done_queue.put(process_msg(message))
+
+            cmd_worker_thread = Thread(target = process_msg, args = (message,))
+            cmd_worker_thread.setDaemon(True)
+            try:
+                cmd_worker_thread.start()
+            except:
+                logging.error('Failed ot start cmd_worker thread')
+                continue
+            else: 
+                cmd_workers.append(cmd_worker_thread)
         except Empty:
-            logging.debug('Task queue is empty')
+            logging.error('Task queue is empty')
             time.sleep(1)
         except:
-            logging.debug('Unknown error in processing task queue')
+            logging.error('Unknown error in processing task queue')
             time.sleep(1)
+
+        for worker in cmd_workers:
+            try:
+                if worker.join(1) is None and worker.is_alive() is not True:
+                    cmd_workers.remove(worker)
+                    logging.debug('1 cmd worker was joined')
+                else:
+                    logging.debug('At least 1 cmd worker is still alive')
+                
+            except RuntimeError, err:
+                cmd_workers.remove(worker)
+                logging.error('Failed ot join thread (%s)' % (err))
+            except:
+                cmd_workers.remove(worker)
+                logging.error('Joining cmd workers failed ?!')
 
 def check_done_queue_worker():
     logging.debug('Checking done queue')
@@ -700,6 +727,7 @@ def main (yaml_facts=None, running_threads_last=0):
 
             for worker in workers:
                 if not worker.is_alive():
+                    workers.remove(worker)
                     logging.error('%s thread just died!' % (worker.name))
 
             time.sleep(5)
