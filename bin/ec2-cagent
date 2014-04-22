@@ -58,7 +58,16 @@ def terminate_process(signum, frame):
     logging.info ('Process asked to exit (SIGTERM) - exiting')
     sys.exit(0)
 
+def watchdog_terminator(signum, frame):
+    try:
+        import traceback
+        logging.error("Self-destructing...")
+        logging.error(traceback.format_exc())
+    finally:
+        os.kill(os.getpid(), signal.SIGKILL)
+
 signal.signal(signal.SIGTERM, terminate_process)
+signal.signal(signal.SIGALRM, watchdog_terminator)
 
 def usage():
     sys.stderr.write('Usage:')
@@ -359,6 +368,7 @@ def process_msg ( message ):
         logging.info('Performing ' + str(mode) + ' reply')
         response={'mode': mode, 'output': ts, 'rc': '0', 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname()};
         done_queue.put(response)
+        return
     else:
         logging.info("Performing ping reply - for discovery purpose")
         response={'mode': 'ping', 'output': ts, 'rc': '0', 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname(), 'discovery':1};
@@ -626,12 +636,12 @@ def check_task_queue_worker():
 
 def check_done_queue_worker():
     logging.debug('Checking done queue')
+    sqs_write_queue = establish_sqs_conn(CFG['aws']['sqs_write_queue'])
 
     while True:
         try:
             response = done_queue.get(True)
             logging.debug('Response read from done queue')
-            sqs_write_queue = establish_sqs_conn(CFG['aws']['sqs_write_queue'])
             write_sqs_msg (response, sqs_write_queue)
 
         except Empty:
@@ -669,11 +679,16 @@ def main (yaml_facts=None, running_threads_last=0):
     # maintain workers
     workers=[]
 
+    # Start 1 threads to handle facts if necessary
     if CFG['general']['yaml_facts'] == True:
         get_yaml_facts_worker_thread = Thread(target = get_yaml_facts_worker, args = ())
         get_yaml_facts_worker_thread.daemon=True
         get_yaml_facts_worker_thread.setName('get_yaml_facts_worker')
-        get_yaml_facts_worker_thread.start()
+        try:
+            get_yaml_facts_worker_thread.start()
+        except:
+            logging.error('Failed ot start get_yaml_facts_worker thread')
+            sys.exit(1)
         workers.append(get_yaml_facts_worker_thread)
 
         logging.info('Waiting for initial facts')
@@ -689,7 +704,7 @@ def main (yaml_facts=None, running_threads_last=0):
         else:
             logging.info('Populated initial facts')
 
-    # Start 4 threads to handle facts, receive sql, done queue, task queue
+    # Start 3 threads to handle receive sql, done queue, task queue
     receive_sqs_msg_worker_thread = Thread(target = receive_sqs_msg_worker, args = (yaml_facts,))
     receive_sqs_msg_worker_thread.daemon=True
     receive_sqs_msg_worker_thread.setName('receive_sqs_msg_worker')
@@ -723,12 +738,14 @@ def main (yaml_facts=None, running_threads_last=0):
             running_threads = active_count()
             if running_threads != running_threads_last:
                 running_threads_last = running_threads
-                logging.debug(str(running_threads) + ' active threads')
+                logging.debug('%d active threads' % (running_threads))
 
+            # Monitor if a thread exited...
             for worker in workers:
                 if not worker.is_alive():
                     workers.remove(worker)
                     logging.error('%s thread just died!' % (worker.name))
+                    signal.alarm(1)
 
             time.sleep(5)
 
