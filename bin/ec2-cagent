@@ -291,8 +291,8 @@ def clean_old_msgs(read_msgs):
     # That will allow AWS to purge old messages a minute before we might pick it up again.
 
     for id, lastseen in read_msgs.items():
-        if lastseen < (time.time() - 120 ):
-            logging.debug('removing old message')
+        if int(lastseen) < (time.time() - 120 ):
+            logging.info('removing old message %s' % (id))
             del read_msgs[id]
 
     return read_msgs
@@ -307,10 +307,15 @@ def sleeper(starttime, interval):
     else:
         return 0
 
-def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
+def receive_sqs_msg_worker ( yaml_facts) :
     sqs_read_queue = establish_sqs_conn(CFG['aws']['sqs_read_queue'])
+    read_msgs = {}
 
     while True:
+
+        # Start watch dog 
+        signal.alarm(60)
+
         starttime=time.time()
         logging.debug('Looking for new messages on SQS')
 
@@ -356,6 +361,9 @@ def receive_sqs_msg_worker ( yaml_facts, read_msgs = {} ):
             logging.debug('Putting SQS message on task queue')
             task_queue.put(message)
 
+        # reset watchdog
+        signal.alarm(0)
+        read_msgs = clean_old_msgs(read_msgs)
         time.sleep(sleeper(starttime, CFG['general']['sqs_poll_interval']))
 
 def process_msg ( message ):
@@ -397,12 +405,18 @@ def write_sqs_msg (response, sqs_write_queue):
     # response_in_json - json string
     # message - sqs message object
 
+    # Start watch dog 
+    signal.alarm(60)
+
     try:
         response_in_json=json.dumps(response)
         logging.debug ('Response size in json ' + str(len(response_in_json)))
         message = sqs_write_queue.new_message(response_in_json)
     except:
         logging.error('Failed to create message object - check queue name')
+
+        # Reset watchdog
+        signal.alarm(0)
         return False
 
     if len(message) >= 65536 and 'output' in response:
@@ -421,10 +435,15 @@ def write_sqs_msg (response, sqs_write_queue):
             message = sqs_write_queue.new_message(response_in_json)
         except:
             logging.error('Failed to create message object - check queue name')
+
+            # Reset watchdog
+            signal.alarm(0)
             return False
 
     elif len(message) >= 65536:
         logging.error ('Response message is too big to put on SQS ' + str(len(message)))
+        # Reset watchdog
+        signal.alarm(0)
         return False
 
     # Retry 3 times
@@ -441,8 +460,12 @@ def write_sqs_msg (response, sqs_write_queue):
         else:
             logging.info ('Write to SQS success')
             logging.debug('Wrote response to SQS')
+            # Reset watchdog
+            signal.alarm(0)
             return True
 
+    # Reset watchdog
+    signal.alarm(0)
     return False
 
 def get_config():
@@ -672,7 +695,7 @@ def main (yaml_facts=None, running_threads_last=0):
             get_yaml_facts_worker_thread.start()
         except:
             logging.error('Failed ot start get_yaml_facts_worker thread')
-            sys.exit(1)
+            terminate_process(15, None)
         workers.append(get_yaml_facts_worker_thread)
 
         logging.info('Waiting for initial facts')
@@ -680,11 +703,11 @@ def main (yaml_facts=None, running_threads_last=0):
             yaml_facts = yaml_queue.get(True, 5)
         except Empty:
             logging.error('Failed to get facts within 5 seconds')
-            sys.exit(1)
+            terminate_process(15, None)
 
         if yaml_facts is None:
             logging.error('Run with yaml facts is set but nothing was found')
-            sys.exit(1)
+            terminate_process(15, None)
         else:
             logging.info('Populated initial facts')
 
@@ -696,7 +719,7 @@ def main (yaml_facts=None, running_threads_last=0):
         receive_sqs_msg_worker_thread.start()
     except:
         logging.error('Failed ot start receive_sqs_msg_worker thread')
-        sys.exit(1)
+        terminate_process(15, None)
     workers.append(receive_sqs_msg_worker_thread)
 
     check_done_queue_worker_thread = Thread(target = check_done_queue_worker)
@@ -705,7 +728,7 @@ def main (yaml_facts=None, running_threads_last=0):
         check_done_queue_worker_thread.start()
     except:
         logging.error('Failed ot start check_done_queue_worker thread')
-        sys.exit(1)
+        terminate_process(15, None)
     workers.append(check_done_queue_worker_thread)
 
     check_task_queue_worker_thread = Thread(target = check_task_queue_worker)
@@ -714,7 +737,7 @@ def main (yaml_facts=None, running_threads_last=0):
         check_task_queue_worker_thread.start()
     except:
         logging.error('Failed ot start check_done_queue_worker thread')
-        sys.exit(1)
+        terminate_process(15, None)
     workers.append(check_task_queue_worker_thread)
 
     try:
@@ -729,7 +752,7 @@ def main (yaml_facts=None, running_threads_last=0):
                 if not worker.is_alive():
                     workers.remove(worker)
                     logging.error('%s thread just died!' % (worker.name))
-                    signal.alarm(1)
+                    terminate_process(15, None)
 
             time.sleep(5)
 
