@@ -12,6 +12,7 @@ import stat
 import getopt
 import logging
 import fcntl
+import cPickle
 
 # Required to support threads
 from threading import Thread
@@ -286,17 +287,40 @@ def script_mode (message):
     response={'mode': message['mode'], 'output': output, 'rc': rc, 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname()};
     return response
 
-def clean_old_msgs(read_msgs):
+def message_history(initialize=False, read_msgs={}):
+    history_file='/tmp/ec2-cagent-message-hist.pickle'
+
+    if initialize is True and os.path.isfile(history_file):
+        logging.debug ('Getting messages from history file %s' %  (history_file))
+        # Read history pickle file to avoid re-reading messages from queue on start-up
+        try:
+            history_fh = open(history_file , 'rb')
+            read_msgs = cPickle.load(history_fh)
+            history_fh.close()
+        except:
+            logging.error ('Failed to re-read-cache file %s - will try to remove file' %  (history_file))
+            os.remove(history_file)
 
     # Clear references to old messages ( keep messages until we haven't done anything for 2 minutes )
     # AWS SQS queues must have this setting
     # Message Retention Period:     1 minutes
     # That will allow AWS to purge old messages a minute before we might pick it up again.
 
+    logging.debug ('Cleaning old messages if any')
     for id, lastseen in read_msgs.items():
         if int(lastseen) < (time.time() - 120 ):
-            logging.info('removing old message %s' % (id))
+            logging.info('removed old message %s' % (id))
             del read_msgs[id]
+
+    # Record current known messages ids to a pickle file so we avoid re-reading messages on start-up
+    try:
+        logging.debug ('Dumping messages to history file %s' %  (history_file))
+        history_fh = open(history_file , 'wb')
+        cPickle.dump( read_msgs, history_fh )
+        history_fh.close()
+    except:
+        logging.error ('Failed to re-read-cache file %s - will try to remove file' %  (history_file))
+        os.remove(history_file)
 
     return read_msgs
 
@@ -312,7 +336,7 @@ def sleeper(starttime, interval):
 
 def receive_sqs_msg_worker ( yaml_facts) :
     sqs_read_queue = establish_sqs_conn(CFG['aws']['sqs_read_queue'])
-    read_msgs = {}
+    read_msgs = message_history(initialize=True)
 
     while True:
 
@@ -320,14 +344,12 @@ def receive_sqs_msg_worker ( yaml_facts) :
         logging.debug('Looking for new messages on SQS')
 
         logging.info ('Attempting to get messages from SQS')
-        msgs = sqs_read_queue.get_messages(num_messages=10, visibility_timeout=0)
         try:
             msgs = sqs_read_queue.get_messages(num_messages=10, visibility_timeout=0)
         except:
-            logging.error('Attempt to receive sqs messages failed - sleeping and reconnecting...')
-            sleep(5)
-            sqs_read_queue = establish_sqs_conn(CFG['aws']['sqs_read_queue'])
-            continue
+            logging.error('Attempt to receive sqs messages failed')
+            # exit thread
+            return
 
         logging.info ('Request messages from SQS success')
 
@@ -354,14 +376,19 @@ def receive_sqs_msg_worker ( yaml_facts) :
             if fact_lookup(wf, wof, yaml_facts ):
                 logging.debug('SQS messages did not pass filter')
                 read_msgs[msg.id] = time.time()
+                # Record and clean old messages
+                read_msgs = message_history(read_msgs=read_msgs)
                 continue
+
+            # Record and clean old messages
+            read_msgs = message_history(read_msgs=read_msgs)
 
             logging.debug('New valid SQS message received')
 
             logging.debug('Putting SQS message on task queue')
             task_queue.put(message)
 
-        read_msgs = clean_old_msgs(read_msgs)
+
         time.sleep(sleeper(starttime, CFG['general']['sqs_poll_interval']))
 
 def process_msg ( message ):
@@ -433,21 +460,19 @@ def write_sqs_msg (response, sqs_write_queue):
         logging.error ('Response message is too big to put on SQS ' + str(len(message)))
         return False
 
-    # Retry 3 times
-    for i in range(0, 3):
-        logging.info ('Attempting write to SQS')
-        try:
-            org = sqs_write_queue.write(message)
-        except:
-            logging.error('Failed to write to sqs - quitting thread')
-            sys.exit(1)
-        if org.id is None:
-            logging.error ('Failed to write response message to SQS')
-            time.sleep(1)
-        else:
-            logging.info ('Write to SQS success')
-            logging.debug('Wrote response to SQS')
-            return True
+    logging.info ('Attempting write to SQS')
+    try:
+        org = sqs_write_queue.write(message)
+    except:
+        logging.error('Failed to write to sqs - quitting thread')
+        return False
+    if org.id is None:
+        logging.error ('Failed to write response message to SQS')
+        return False
+    else:
+        logging.info ('Write to SQS success')
+        logging.debug('Wrote response to SQS')
+        return True
 
     return False
 
@@ -609,20 +634,17 @@ def check_task_queue_worker():
         try:
             message = task_queue.get(True)
             logging.debug('Task read from task queue')
-
+        except Empty:
+            logging.error('Task queue is empty')
+        except:
+            logging.error('Unknown error in processing task queue')
+        else:
             cmd_worker_thread = Thread(target = process_msg, args = (message,))
             cmd_worker_thread.setDaemon(True)
             try:
                 cmd_worker_thread.start()
             except:
                 logging.error('Failed ot start cmd_worker thread')
-                continue
-        except Empty:
-            logging.error('Task queue is empty')
-            time.sleep(1)
-        except:
-            logging.error('Unknown error in processing task queue')
-            time.sleep(1)
 
 def check_done_queue_worker():
     logging.debug('Checking done queue')
@@ -632,14 +654,12 @@ def check_done_queue_worker():
         try:
             response = done_queue.get(True)
             logging.debug('Response read from done queue')
-            write_sqs_msg (response, sqs_write_queue)
-
         except Empty:
             logging.debug('Done queue is empty')
-            time.sleep(1)
         except:
             logging.debug('Unknown error in processing done queue')
-            time.sleep(1)
+        else:
+            write_sqs_msg (response, sqs_write_queue)
 
 def establish_sqs_conn (queue):
 
