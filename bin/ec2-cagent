@@ -313,9 +313,6 @@ def receive_sqs_msg_worker ( yaml_facts) :
 
     while True:
 
-        # Start watch dog 
-        signal.alarm(60)
-
         starttime=time.time()
         logging.debug('Looking for new messages on SQS')
 
@@ -361,8 +358,6 @@ def receive_sqs_msg_worker ( yaml_facts) :
             logging.debug('Putting SQS message on task queue')
             task_queue.put(message)
 
-        # reset watchdog
-        signal.alarm(0)
         read_msgs = clean_old_msgs(read_msgs)
         time.sleep(sleeper(starttime, CFG['general']['sqs_poll_interval']))
 
@@ -405,18 +400,12 @@ def write_sqs_msg (response, sqs_write_queue):
     # response_in_json - json string
     # message - sqs message object
 
-    # Start watch dog 
-    signal.alarm(60)
-
     try:
         response_in_json=json.dumps(response)
         logging.debug ('Response size in json ' + str(len(response_in_json)))
         message = sqs_write_queue.new_message(response_in_json)
     except:
         logging.error('Failed to create message object - check queue name')
-
-        # Reset watchdog
-        signal.alarm(0)
         return False
 
     if len(message) >= 65536 and 'output' in response:
@@ -435,15 +424,10 @@ def write_sqs_msg (response, sqs_write_queue):
             message = sqs_write_queue.new_message(response_in_json)
         except:
             logging.error('Failed to create message object - check queue name')
-
-            # Reset watchdog
-            signal.alarm(0)
             return False
 
     elif len(message) >= 65536:
         logging.error ('Response message is too big to put on SQS ' + str(len(message)))
-        # Reset watchdog
-        signal.alarm(0)
         return False
 
     # Retry 3 times
@@ -460,12 +444,8 @@ def write_sqs_msg (response, sqs_write_queue):
         else:
             logging.info ('Write to SQS success')
             logging.debug('Wrote response to SQS')
-            # Reset watchdog
-            signal.alarm(0)
             return True
 
-    # Reset watchdog
-    signal.alarm(0)
     return False
 
 def get_config():
