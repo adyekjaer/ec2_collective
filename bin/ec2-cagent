@@ -170,8 +170,12 @@ def get_yaml_facts_worker ():
         # Define dict for storage
         dataMap = {}
         valid_yaml_files = []
-
-        yaml_files = CFG['general']['yaml_facts_path'].split(',')
+    
+        # Handle comma seperated list or a list
+        if ',' in CFG['general']['yaml_facts_path']:
+            yaml_files = CFG['general']['yaml_facts_path'].split(',')
+        else:
+            yaml_files = CFG['general']['yaml_facts_path']
         for yaml_file in yaml_files:
 
             if not os.path.exists(yaml_file):
