@@ -1,0 +1,16 @@
+{
+    "general": {
+        "log_level": "<%= @log_level %>",
+        "cmd_timeout": 10,
+        "ping_timeout": 5,
+        "clean_timeout": 5,
+        "use_facts_queue": false
+    },
+    "aws": {
+        "region": "eu-west-1",
+        "default_queue_name": "<%= @default_queue_name %>",
+        "write_queue_suffix": "_<%= @master_write_suffix %>",
+        "read_queue_suffix": "_<%= @maste_read_suffix %>",
+        "facts_queue_suffix": "_<%= @master_facts_suffix %>"
+    }
+}

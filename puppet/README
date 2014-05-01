@@ -1,0 +1,3 @@
+Test:
+
+export FACTER_nodeclass=agent_role ; sudo -E puppet apply -vd --modulepath ./modules ./manifests/site.pp
