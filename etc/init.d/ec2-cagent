@@ -19,7 +19,6 @@ fi
 
 AGENTPATH="/usr/local/bin/ec2-cagent"
 AGENTCONF="/etc/ec2_collective/ec2-cagent.json"
-AGENTUSER="ec2-cagent"
 NAME="ec2-cagent"
 DESC="ec2_collective agent"
 DDAGENT_PID_PATH="/var/run/ec2_collective"
