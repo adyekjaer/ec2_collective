@@ -1,4 +1,4 @@
-/var/log/ec2_collective/*.log {
+/var/log/ec2_collective/ec2-cagent.log {
 	daily
 	missingok
 	rotate 10

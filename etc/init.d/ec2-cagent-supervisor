@@ -17,7 +17,7 @@ fi
 
 . /lib/lsb/init-functions
 
-AGENTPATH="/usr/bin/ec2-cagent"
+AGENTPATH="/usr/local/bin/ec2-cagent"
 AGENTCONF="/etc/ec2_collective/ec2-cagent.json"
 AGENTUSER="ec2-cagent"
 NAME="ec2-cagent"
