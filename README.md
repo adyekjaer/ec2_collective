@@ -200,7 +200,7 @@ Edit your ec2-cagent.json according to your queues and fact file locations.
             "sqs_poll_interval": 1,
             "queue_poll_interval": 0.1,
             "yaml_facts": true,
-            "yaml_facts_path": "/etc/ec2_collective/facts.yaml,/var/lib/puppet/state/classes.txt",
+            "yaml_facts_path": [ "/etc/ec2_collective/facts.yaml", "/var/lib/puppet/state/classes.txt" ],
             "yaml_facts_refresh": 30,
             "use_facts_queue": true
         },
