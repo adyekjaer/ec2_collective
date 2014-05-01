@@ -1,4 +1,7 @@
-from distutils.core import setup
+try:
+    from setuptools import setup
+except ImportError:
+    from distutils.core import setup
 
 setup(
     name='ec2-collective',
@@ -16,6 +19,6 @@ setup(
     description='Mcollective alternative using AWS SQS',
     long_description=open('README.txt').read(),
     install_requires=[
-      "boto >= 2.0",
+      'boto >= 2.0', 'pyyaml'
       ],
     )
