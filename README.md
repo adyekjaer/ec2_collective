@@ -136,7 +136,7 @@ Create a user for the agent with the following policy:
             "sqs:GetQueueAttributes",
             "sqs:GetQueueUrl",
             "sqs:ListQueues",
-         "sqs:ReceiveMessage"
+            "sqs:ReceiveMessage"
           ],
           "Effect": "Allow",
           "Resource": [
@@ -174,26 +174,22 @@ Create a user for the master 'publisher' tool:
       ]
     }
 
-Agent installation
+General installation
 -------
 
-Perform the following steps on the servers you wish to orchestrate
+Configure AWS credentials on both your masters and slaves, either inside the Boto configuration or through [role-based access][ROLEAUTH].
 
-- *cp ec2-cagent /usr/sbin/ec2-cagent && chmod +x /usr/sbin/ec2-cagent*
-- *cp scripts/ec2-cagent-init /etc/init.d/ec2-cagent && chmod +x /etc/init.d/ec2-cagent*
-- *cp scripts/ec2-cagent-logrotate /etc/logrotate.d/ec2-cagent*
-- *mkdir /var/log/ec2_collective/*
-- *mkdir /etc/ec2_collective*
-- *cp conf/ec2-cagent.json /etc/ec2_collective*
-- Add a /etc/boto.cfg including the AWS IAM credentials
-
-Edit your /etc/boto.cfg to contain
+A boto configuration file in /etc/boto.cfg for both master and agent should contain the following
 
     [Credentials]
-    ...
+    aws_access_key_id = ...
+    aws_secret_access_key = ...
 
-    [Boto]
-    http_socket_timeout = 30
+Install the package - this includes both master and agent
+sudo pip -v install git+https://github.com/adyekjaer/ec2_collective/#egg=ec2-collective
+
+Agent config
+-------
 
 Edit your ec2-cagent.json according to your queues and fact file locations.
 
@@ -215,23 +211,8 @@ Edit your ec2-cagent.json according to your queues and fact file locations.
         }
     }
 
-Master installation
+Master config
 -------
-
-Perform the following steps on your workstations where you wish to perform the orchestration
-
-- *cp ec2-cmaster whereever && chmod +xec2-cagent*
-- *mkdir /etc/ec2_collective*
-- *cp conf/ec2-cmaster.json /etc/ec2_collective*
-- Add a /etc/boto.cfg including the AWS IAM credentials
-
-Edit your /etc/boto.cfg to contain
-
-    [Credentials]
-    ...
-
-    [Boto]
-    http_socket_timeout = 30
 
 Edit your ec2-cmaster.json according to your queues.
 
@@ -252,8 +233,6 @@ Edit your ec2-cmaster.json according to your queues.
         }
     }
 
-Configure AWS credentials on both your masters and slaves, either inside the Boto configuration or through [role-based access][ROLEAUTH].
-
 Usage
 -------
 
@@ -266,6 +245,33 @@ On the master you can trigger command executed on the slaves
     user@master $ ec2-cmaster -c 'hostname -f'
     >>>>>> slave.example.com exit code: (0):
     slave.example.com
+
+    Got response from 1 out of 1/1 (discovered/expected) - exit code (0)
+
+Command all your frontends on production queue
+
+    user@master $ ec2-cmaster -q production -c 'hostname -f' -w role=frontend
+    >>>>>> front1.example.com exit code: (0):
+    front1.example.com
+
+    >>>>>> front2.example.com exit code: (0):
+    front2.example.com
+
+    Got response from 2 out of 2/2 (discovered/expected) - exit code (0)
+
+Command all your frontends on production queue execpt instance i-ABCD1234
+
+    user@master $ ec2-cmaster -q production -c 'hostname -f' -w role=frontend -n instance_id=i-ABCD1234
+    >>>>>> front1.example.com exit code: (0):
+    front1.example.com
+
+    Got response from 1 out of 1/1 (discovered/expected) - exit code (0)
+
+Command all your frontends which have the puppet memcached class ( in this case only front2 have memcached )
+
+    user@master $ ec2-cmaster -c 'hostname -f' -w role=backend -w memcached
+    >>>>>> front2.example.com exit code: (0):
+    front2.example.com
 
     Got response from 1 out of 1/1 (discovered/expected) - exit code (0)
 
