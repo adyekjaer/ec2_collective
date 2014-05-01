@@ -186,6 +186,7 @@ A boto configuration file in /etc/boto.cfg for both master and agent should cont
     aws_secret_access_key = ...
 
 Install the package - this includes both master and agent
+
 sudo pip -v install git+https://github.com/adyekjaer/ec2_collective/#egg=ec2-collective
 
 Agent config
