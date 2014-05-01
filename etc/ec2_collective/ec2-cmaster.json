@@ -9,8 +9,8 @@
     "aws": {
         "region": "eu-west-1",
         "default_queue_name": "testing",
-        "write_queue_suffix": "_ec2_cmaster",
-        "read_queue_suffix": "_ec2_cagent",
-        "facts_queue_suffix": "_ec2_cfacts"
+        "write_queue_suffix": "_master",
+        "read_queue_suffix": "_agent",
+        "facts_queue_suffix": "_facts"
     }
 }
