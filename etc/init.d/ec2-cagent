@@ -1,81 +1,82 @@
-#!/bin/bash -e
+#!/bin/sh
+
 ### BEGIN INIT INFO
-# Provides:          ec2_cagent
-# Required-Start:    $local_fs $remote_fs $network
-# Required-Stop:     $local_fs $remote_fs $network
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# X-Interactive:     true
-# Short-Description: Start/stop ec2_collective agent
+# Provides: ec2-cagent
+# Short-Description: Start and stop ec2-cagent
+# Description: ec2-cagent is the instance agent of ec2_collective
+# Required-Start: $remote_fs $network
+# Required-Stop: $remote_fs $network
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
 ### END INIT INFO
-#
-# ec2_collective	This init.d script is used to start ec2_collective agent
 
-ENV="env -i LANG=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-HOME=/root
-
-EC2_CAGENT=`which ec2-cagent`
-PIDFILE=/var/run/ec2-cagent.pid
-IS_ACTIVE=1
-
-if [ -s $PIDFILE ]; then
-	PID=$(cat $PIDFILE)
-	if ps -p $PID > /dev/null 2>&1 ; then
-		IS_ACTIVE=0
-	else
-		IS_ACTIVE=1
-	fi
-else
-	if pgrep -f $EC2_CAGENT > /dev/null 2>&1; then
-		IS_ACTIVE=0
-		PID=$(pgrep -f $EC2_CAGENT | head -1)
-	else
-		IS_ACTIVE=1
-	fi
+if [ $(whoami) != 'root' ]; then
+    echo 'You must be root'
+    exit 1
 fi
 
-stop() {
-	if [ ${IS_ACTIVE} -eq 0 ]; then
-		echo "Stopping ec2-cagent"
-		kill $PID
-		IS_ACTIVE=1
-	else
-		echo "ec2-cagent is already stopped..."
-	fi
+. /lib/lsb/init-functions
+
+AGENTPATH="/usr/local/bin/ec2-cagent"
+AGENTCONF="/etc/ec2_collective/ec2-cagent.json"
+AGENTUSER="ec2-cagent"
+NAME="ec2-cagent"
+DESC="ec2_collective agent"
+DDAGENT_PID_PATH="/var/run/ec2_collective"
+
+check_status() {
+    if supervisorctl status $NAME | grep -q RUNNING; then
+        echo "$DESC is running"
+        return 0
+    else
+       echo "$DESC is NOT running"
+       return 1
+    fi
 }
 
-start() {
-	if [ ${IS_ACTIVE} -eq 0 ]; then
-		echo "ec2-cagent is already running..."
-	else
-		echo "Starting ec2-cagent"
-		$ENV $EC2_CAGENT
-	fi
-}
+# Action to take
+case "$1" in
+    start)
 
-case $1 in
-	start)
-		start
-	;;
-	stop)
-		stop
-	;;
-	restart)
-		echo 'Restarting ec2-cagent'
-		stop
-		start
-	;;
-	status)
-		if [ ${IS_ACTIVE} -eq 0 ]; then
-			echo "ec2-cagent is running"
-			exit 0
-		else
-			echo "ec2-cagent is NOT running."
-			exit 1
-		fi
-	;;
-	*)
-		echo "Usage: /etc/init.d/ec2-cagent.sh {start|stop|restart|status}"
-		exit 1
-	;;
+        if [ ! -f $AGENTCONF ]; then
+            echo "$AGENTCONF not found. Exiting."
+            exit 3
+        fi
+
+        check_status > /dev/null
+        if [ $? -eq 0 ]; then
+            echo "$DESC is already running"
+            exit 0
+        fi
+
+        log_daemon_msg "Starting $DESC (using supervisord)" "$NAME"
+        supervisorctl start ec2-cagent
+        if [ $? -ne 0 ]; then
+            log_end_msg 1
+        else
+           log_end_msg 0
+           exit 0
+        fi
+        ;;
+    stop)
+        log_daemon_msg "Stopping $DESC (using supervisord)" "$NAME"
+        supervisorctl stop ec2-cagent
+        log_end_msg $?
+        ;;
+
+    status)
+        check_status
+        ;;
+
+    restart|force-reload)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        N=/etc/init.d/$NAME
+        echo "Usage: $N {start|stop|restart|tatus}"
+        exit 1
+        ;;
 esac
+
+exit $?
