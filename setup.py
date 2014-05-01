@@ -15,6 +15,7 @@ setup(
         ('/etc/supervisor/conf.d/', ['etc/supervisor/ec2-cagent.conf']),
         ('/etc/ec2_collective', ['etc/ec2_collective/ec2-cagent.json', 'etc/ec2_collective/ec2-cmaster.json']),
         ('/var/log/ec2_collective', []),
+        ('/var/run/ec2_collective', []),
         ('/etc/logrotate.d', ['etc/logrotate.d/ec2-cagent'])
       ],
     url='http://pypi.python.org/pypi/ec2-collective/',
