@@ -1,6 +1,5 @@
 class ec2_collective::params {
     $run_as                     = 'root'
-    $run_as_group_membership    = undef
     $release                    = '2014050100'
     $install_deps               = true
     $install_agent              = true

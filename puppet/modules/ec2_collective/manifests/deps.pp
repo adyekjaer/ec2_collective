@@ -1,11 +1,6 @@
 class ec2_collective::deps () inherits ec2_collective {
 
     if $run_as != 'root' and ! defined(User["$run_as"]){
-        group { 'ec2_collective_group_membership':
-            ensure  => present,
-            name => "$run_as_group_membership"
-        }
-
         group { 'ec2_collective_user_primary_grup':
             ensure  => present,
             name => "$run_as"
@@ -15,8 +10,7 @@ class ec2_collective::deps () inherits ec2_collective {
             ensure  => present,
             name    => "$run_as",
             gid     => "$run_as",
-            groups  => "$run_as_group_membership",
-            require => [ Group['ec2_collective_user_primary_grup'], Group['ec2_collective_group_membership'] ] 
+            require => Group['ec2_collective_user_primary_grup']
         }
     }
 

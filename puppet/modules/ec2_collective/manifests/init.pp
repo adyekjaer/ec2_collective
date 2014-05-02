@@ -1,7 +1,6 @@
 class ec2_collective (
     $install_deps               = $ec2_collective::params::install_deps,
     $run_as                     = $ec2_collective::params::run_as,
-    $run_as_group_membership    = $ec2_collective::params::run_as_group_membership,
     $release                    = $ec2_collective::params::release,
     $install_agent              = $ec2_collective::params::install_agent,
     $install_master             = $ec2_collective::params::install_master,
