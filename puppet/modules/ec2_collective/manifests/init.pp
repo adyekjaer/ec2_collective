@@ -22,19 +22,13 @@ class ec2_collective (
     }
 
     # This class triggers download of the release
-    class {'ec2_collective::dirs': }
+    class {'ec2_collective::dirs':
+        require => Class['ec2_collective::fetch'] 
+    }
 
     if $install_agent {
         class {'ec2_collective::agent':
             require => Class['ec2_collective::dirs']
-        }
-
-        service { 'ec2-cagent':
-            ensure      => running,
-            enable      => true,
-            hasstatus   => true,
-            hasrestart  => true,
-            require     => Class['ec2_collective::agent']
         }
     }
 

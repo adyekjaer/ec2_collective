@@ -5,7 +5,8 @@ class ec2_collective::agent () inherits ec2_collective {
         cwd         => '/tmp',
         path        => '/usr/bin:/usr/sbin:/bin:/usr/local/bin', 
         refreshonly => true,
-        notify      => Exec['supervisor_add']
+        notify      => Exec['supervisor_add'],
+        before      => Service['ec2-cagent']
     }
 
     exec { 'supervisor_add' :
@@ -13,6 +14,7 @@ class ec2_collective::agent () inherits ec2_collective {
         cwd         => '/tmp',
         path        => '/usr/bin:/usr/sbin:/bin:/usr/local/bin', 
         refreshonly => true,
+        before      => Service['ec2-cagent']
     }
 
     file { '/etc/init.d/ec2-cagent':
@@ -35,13 +37,28 @@ class ec2_collective::agent () inherits ec2_collective {
         content => template('ec2_collective/ec2-cagent.json.erb'),
         owner => 'root',
         group => 'root',
-        mode => '0755'
+        mode => '0755',
+        notify  => Service['ec2-cagent'],
     }
 
     file { '/usr/local/bin/ec2-cagent':
-        source => "/tmp/ec2_collective-${release}/bin/ec2-cagent",
-        owner => 'root',
-        group => 'root',
-        mode => '0755'
+        source  => "/tmp/ec2_collective-${release}/bin/ec2-cagent",
+        owner   => 'root',
+        group   => 'root',
+        mode    => '0755',
+        require => Exec['extract_ec2_collective'],
+        notify  => Service['ec2-cagent'],
+    }
+
+    service { 'ec2-cagent':
+        ensure      => running,
+        enable      => true,
+        hasstatus   => true,
+        hasrestart  => true,
+        require     => [ 
+                        File['/usr/local/bin/ec2-cagent'], 
+                        File['/etc/supervisor/conf.d/ec2-cagent.conf'], 
+                        File['/etc/ec2_collective/ec2-cagent.json'] 
+                        ]
     }
 }

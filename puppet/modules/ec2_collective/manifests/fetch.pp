@@ -7,8 +7,7 @@ class ec2_collective::fetch () inherits ec2_collective {
         command     => "wget -O /tmp/ec2_collective.tar.gz ${url}",
         cwd         => '/tmp',
         path        => '/usr/bin:/usr/sbin:/bin:/usr/local/bin', 
-        subscribe   => File['/etc/ec2_collective'],
-        refreshonly => true,
+        creates     => '/tmp/ec2_collective.tar.gz',
         require     => Package['wget'],
     }
 
@@ -16,8 +15,7 @@ class ec2_collective::fetch () inherits ec2_collective {
         command     => "tar -xf /tmp/ec2_collective.tar.gz",
         cwd         => '/tmp',
         path        => '/usr/bin:/usr/sbin:/bin:/usr/local/bin', 
-        subscribe   => Exec['download_ec2_collective'],
-        refreshonly => true,
-        require     => Package['wget'],
+        creates     => "/tmp/${archive}",
+        require     => Exec['download_ec2_collective']
     }
 }
