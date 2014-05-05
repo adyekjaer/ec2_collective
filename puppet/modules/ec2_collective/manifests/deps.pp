@@ -12,6 +12,12 @@ class ec2_collective::deps () inherits ec2_collective {
         }
     }
 
+    if ! defined(Package['logrotate']) {
+        package { 'logrotate':
+            ensure => installed
+        }
+    }
+
     if $run_as != 'root' and ! defined(User["$run_as"]){
         group { 'ec2_collective_user_primary_grup':
             ensure  => present,

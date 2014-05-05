@@ -24,6 +24,14 @@ class ec2_collective::agent () inherits ec2_collective {
         mode => '0755'
     }
 
+    file { '/etc/logrotate.d/ec2-cagent':
+        content => template('ec2_collective/ec2-cagent-logrotate.erb'),
+        owner   => 'root',
+        group   => 'root',
+        mode    => '0644',
+        require => Package['logrotate']
+    }
+
     file { '/etc/supervisor/conf.d/ec2-cagent.conf':
         content => template('ec2_collective/ec2-cagent-supervisor.erb'),
         owner   => 'root',

@@ -1,0 +1,8 @@
+/var/log/ec2_collective/ec2-cagent.log {
+	daily
+	missingok
+	rotate 10
+	notifempty
+	create 640 <%= @run_as %> <%= @run_as %>
+	sharedscripts
+}
