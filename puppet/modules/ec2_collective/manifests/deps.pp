@@ -12,12 +12,6 @@ class ec2_collective::deps () inherits ec2_collective {
         }
     }
 
-    if ! defined(Package['supervisor']) {
-        package { 'supervisor':
-            ensure => installed
-        }
-    }
-
     if $run_as != 'root' and ! defined(User["$run_as"]){
         group { 'ec2_collective_user_primary_grup':
             ensure  => present,
@@ -70,13 +64,21 @@ class ec2_collective::deps () inherits ec2_collective {
         }
     }
 
-    if ! defined(Service['supervisor']) {
-        service { 'supervisor':
-            ensure      => running,
-            enable      => true,
-            hasstatus   => true,
-            hasrestart  => true,
-            require     => Package['supervisor']
+    if $install_agent {
+        if ! defined(Package['supervisor']) {
+            package { 'supervisor':
+                ensure => installed
+            }
+        }
+
+        if ! defined(Service['supervisor']) {
+            service { 'supervisor':
+                ensure      => running,
+                enable      => true,
+                hasstatus   => true,
+                hasrestart  => true,
+                require     => Package['supervisor']
+            }
         }
     }
 
