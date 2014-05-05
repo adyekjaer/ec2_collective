@@ -2,6 +2,8 @@ class ec2_collective::params {
     $run_as                     = 'root'
     $release                    = '2014050100'
     $install_deps               = true
+    $boto_version               = '2.27.0'
+    $deps_from_pip              = false
     $install_agent              = true
     $install_master             = false
     $log_level                   = 'INFO'

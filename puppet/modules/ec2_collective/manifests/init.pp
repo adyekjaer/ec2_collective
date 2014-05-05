@@ -1,10 +1,12 @@
 class ec2_collective (
     $install_deps               = $ec2_collective::params::install_deps,
+    $deps_from_pip              = $ec2_collective::params::deps_from_pip,
+    $boto_version               = $ec2_collective::params::boto_version,
     $run_as                     = $ec2_collective::params::run_as,
     $release                    = $ec2_collective::params::release,
     $install_agent              = $ec2_collective::params::install_agent,
     $install_master             = $ec2_collective::params::install_master,
-    $log_level                   = $ec2_collective::params::log_level,
+    $log_level                  = $ec2_collective::params::log_level,
     $fact_files                 = $ec2_collective::params::fact_files,
     $agent_read_queue           = $ec2_collective::params::agent_read_queue,
     $agent_write_queue          = $ec2_collective::params::agent_write_queue,
