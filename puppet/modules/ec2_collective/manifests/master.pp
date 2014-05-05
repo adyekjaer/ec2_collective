@@ -1,9 +1,9 @@
 class ec2_collective::master () inherits ec2_collective {
 
     file { '/etc/ec2_collective/ec2-cmaster.json':
-        ensure => directory,
+        content => template('ec2_collective/ec2-cmaster.json.erb'),
         owner => 'root',
-        owner => 'root',
+        group => 'root',
         mode => '0755'
     }
 
