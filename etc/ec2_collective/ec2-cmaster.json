@@ -4,7 +4,7 @@
         "cmd_timeout": 10,
         "ping_timeout": 5,
         "clean_timeout": 5,
-        "use_facts_queue": false
+        "use_facts_queue": true
     },
     "aws": {
         "region": "eu-west-1",
