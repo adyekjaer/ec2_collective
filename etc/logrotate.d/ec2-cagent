@@ -3,6 +3,6 @@
 	missingok
 	rotate 10
 	notifempty
-	create 640 root admin
+	create 640 root root
 	sharedscripts
 }
