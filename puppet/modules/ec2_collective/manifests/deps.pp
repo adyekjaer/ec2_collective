@@ -38,7 +38,7 @@ class ec2_collective::deps () inherits ec2_collective {
             command     => "pip install boto==${boto_version}",
             cwd         => '/tmp',
             path        => '/usr/bin:/usr/sbin:/bin:/usr/local/bin', 
-            unless      => 'pip freeze | grep -iq ^boto',
+            unless      => "pip freeze | grep -iq ^boto==${boto_version}",
             require     => Package['python-pip']
         }
 
