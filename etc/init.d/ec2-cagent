@@ -21,7 +21,20 @@ AGENTPATH="/usr/local/bin/ec2-cagent"
 AGENTCONF="/etc/ec2_collective/ec2-cagent.json"
 NAME="ec2-cagent"
 DESC="ec2_collective agent"
-DDAGENT_PID_PATH="/var/run/ec2_collective"
+AGENT_PID_PATH="/var/run/ec2_collective"
+
+# Check that path for pid file exists
+if [ ! -d "$AGENT_PID_PATH" ]; then
+    mkdir -p $AGENT_PID_PATH
+fi
+
+check_avail() {
+    if supervisorctl avail | grep $NAME | grep -q avail; then
+        echo "Adding $NAME to supervisor"
+        supervisorctl add $NAME
+    fi
+    return 0
+}
 
 check_status() {
     if supervisorctl status $NAME | grep -q RUNNING; then
@@ -32,6 +45,8 @@ check_status() {
        return 1
     fi
 }
+
+check_avail > /dev/null
 
 # Action to take
 case "$1" in
