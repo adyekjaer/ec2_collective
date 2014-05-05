@@ -14,10 +14,4 @@ class ec2_collective::dirs () inherits ec2_collective {
         mode => '0755'
     }
 
-    file { '/var/run/ec2_collective':
-        ensure => directory,
-        owner => "$run_as",
-        group => "$run_as",
-        mode => '0755'
-    }
 }

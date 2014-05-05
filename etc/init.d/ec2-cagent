@@ -21,12 +21,6 @@ AGENTPATH="/usr/local/bin/ec2-cagent"
 AGENTCONF="/etc/ec2_collective/ec2-cagent.json"
 NAME="ec2-cagent"
 DESC="ec2_collective agent"
-AGENT_PID_PATH="/var/run/ec2_collective"
-
-# Check that path for pid file exists
-if [ ! -d "$AGENT_PID_PATH" ]; then
-    mkdir -p $AGENT_PID_PATH
-fi
 
 check_avail() {
     if supervisorctl avail | grep $NAME | grep -q avail; then
