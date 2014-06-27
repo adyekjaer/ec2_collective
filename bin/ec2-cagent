@@ -168,14 +168,21 @@ def get_yaml_facts_worker ():
     while True:
         starttime=time.time()
         # Define dict for storage
-        dataMap = {}
+        facts = {}
         valid_yaml_files = []
-    
+
+        if CFG['facts']['use_facter']:
+            output, rc = system_exec(CFG['facts']['facter_cmd'])
+            try:
+                facts.update(yaml.safe_load(output))
+            except:
+                logging.error('Error while loading yaml from facter')
+
         # Handle comma seperated list or a list
-        if ',' in CFG['general']['yaml_facts_path']:
-            yaml_files = CFG['general']['yaml_facts_path'].split(',')
+        if ',' in CFG['facts']['facts_path']:
+            yaml_files = CFG['facts']['facts_path'].split(',')
         else:
-            yaml_files = CFG['general']['yaml_facts_path']
+            yaml_files = CFG['facts']['facts_path']
         for yaml_file in yaml_files:
 
             if not os.path.exists(yaml_file):
@@ -201,11 +208,11 @@ def get_yaml_facts_worker ():
 
                 for fact in fact_string:
                     newfact = {fact:'None'}
-                    dataMap.update(newfact)
+                    facts.update(newfact)
             else:
                 logging.debug('We assume facts file is in yaml format ' + str(yaml_file))
                 try: 
-                    dataMap.update(data_from_file)
+                    facts.update(data_from_file)
                     f.close()
                 except ValueError, yamlerr:
                     logging.error('Failed to load yaml file %s (%s)' % (yaml_file, yamlerr))
@@ -214,29 +221,35 @@ def get_yaml_facts_worker ():
                     logging.error('Failed to load yaml file')
                     break
 
-        if len(dataMap) > 0:
+        if len(facts) > 0:
             logging.info('Facts loaded from file(s)')
-            logging.debug(str(dataMap))
-            yaml_queue.put(dataMap)
+            logging.debug(str(facts))
+            yaml_queue.put(facts)
 
-            if CFG['general']['use_facts_queue'] == True:
-                write_yaml_to_queue(dataMap, sqs_facts_queue)
+            if CFG['facts']['use_queue'] == True:
+                write_yaml_to_queue(facts, sqs_facts_queue)
         else:
             logging.debug('Facts are empty')
 
-        time.sleep(sleeper(starttime, CFG['general']['yaml_facts_refresh']))
+        time.sleep(sleeper(starttime, CFG['facts']['refresh']))
 
-def cli_mode (message):
+def system_exec (cmd):
 
     try:
-        logging.debug ('Executing: ' + str(message['cmd']))
-        o = subprocess.Popen(message['cmd'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
+        logging.debug ('Executing: %s' % (cmd))
+        o = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
         output = o.communicate()[0]
         rc = o.poll()
 
     except OSError, e:
-        output = ('Failed to execute ' + message['cmd'] + ' (%d) %s \n' % (e.errno, e.strerror))
+        output = ('Failed to execute: %s (%d) %s' % (cmd, e.errno, e.strerror))
         rc = e.errno
+
+    return (output, rc)
+
+def cli_mode (message):
+
+    output, rc = system_exec(message['cmd'])
 
     response={'mode': message['mode'], 'output': output, 'rc': rc, 'ts':time.time(), 'msg_id':message['orgid'], 'hostname':gethostname()};
     return response
@@ -271,16 +284,7 @@ def script_mode (message):
     if message['script_param'] is not None:
         command = str(command) + ' ' + str(message['script_param'])
 
-    try:
-        logging.debug ('Executing script: ' + str(message['cmd']) + ' with params: ' + str(message['script_param']))
-        o = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True)
-        output = o.communicate()[0]
-        rc = o.poll()
-
-    except OSError, e:
-        logging.error ('Failed to execute ' + message['cmd'] )
-        output = ('Failed to execute ' + message['cmd'] + ' (%d) %s \n' % (e.errno, e.strerror))
-        rc = e.errno
+    output, rc = system_exec(command)
 
     try:
         logging.debug ('Deleting file with script '  + script_file)
@@ -569,7 +573,7 @@ def fact_lookup (wf, wof, yaml_facts ):
    # Execptions where we need to be careful
 
     # If yaml facts is false
-    if CFG['general']['yaml_facts'] == False:
+    if CFG['facts']['enabled'] == False:
         if wf is None and wof is None:
             logging.debug('Process message - yaml_facts is False and message contains no facts')
             return False
@@ -578,7 +582,7 @@ def fact_lookup (wf, wof, yaml_facts ):
             return True
 
     # If yaml facts is true
-    if CFG['general']['yaml_facts'] == True:
+    if CFG['facts']['enabled'] == True:
         # but we have no facts skip everything
         if yaml_facts is None:
             logging.error('Skip message - yaml_facts is True but there are no facts available!')
@@ -677,16 +681,16 @@ def establish_sqs_conn (queue):
 
     try:
         logging.info('Getting queue url for ' + str(queue))
-        queue = conn.get_queue(queue)
+        queue_conn = conn.get_queue(queue)
     except:
         logging.error('Could not determine SQS queue url - check your authentication')
         sys.exit(1)
 
-    if queue is None:
+    if queue_conn is None:
         logging.error('Unable to get ' + str(queue) + ' queue by name')
         sys.exit(1)
 
-    return queue
+    return queue_conn
 
 def main (yaml_facts=None, running_threads_last=0):
 
@@ -694,7 +698,7 @@ def main (yaml_facts=None, running_threads_last=0):
     workers=[]
 
     # Start 1 threads to handle facts if necessary
-    if CFG['general']['yaml_facts'] == True:
+    if CFG['facts']['enabled'] == True:
         get_yaml_facts_worker_thread = Thread(target = get_yaml_facts_worker, args = ())
         get_yaml_facts_worker_thread.daemon=True
         get_yaml_facts_worker_thread.setName('get_yaml_facts_worker')
