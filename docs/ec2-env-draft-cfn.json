@@ -1,0 +1,178 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "ec2 instance testing",
+
+  "Parameters" : {
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "t1.micro",
+      "AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","m3.xlarge","m3.2xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+	
+	"MinNumInstances": {
+      "Type": "Number",
+      "Description": "Minimum number of instances to run.",
+      "Default": "10",
+      "ConstraintDescription": "Must be an integer less than MaxNumInstances."
+        },
+      
+	"MaxNumInstances": {
+      "Type": "Number",
+      "Description": "Maximum number of instances to run.",
+      "Default": "10",
+      "ConstraintDescription": "Must be an integer greater than MinNumInstances."
+        },
+	
+    "DesiredNumInstances" : {
+      "Description" : "Number of instances to start",
+      "Type" : "String",
+      "Default" : "10"
+    },
+	
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type" : "String",
+	  "Default" : "eu-west-1"
+    },
+	
+    "SSHLocation" : {
+      "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+   },
+   
+   "QueuePrefix" : {
+      "Description" : "Namespace of queues to allow access to (testing -> testing_QUEUE_NAME)",
+      "Type" : "String",
+      "MinLength": "1",
+      "MaxLength": "80",
+	  "Default": "testing",
+      "AllowedPattern": "[a-zA-Z0-9]+",
+      "ConstraintDescription": "must be a valid queue name, alphanumeric characters only."
+    }
+    
+  },
+
+  "Mappings" : {
+    "AWSInstanceType2Arch" : {
+      "t1.micro"    : { "Arch" : "64" },
+      "m1.small"    : { "Arch" : "64" },
+      "m1.medium"   : { "Arch" : "64" },
+      "m1.large"    : { "Arch" : "64" },
+      "m1.xlarge"   : { "Arch" : "64" },
+      "m2.xlarge"   : { "Arch" : "64" },
+      "m2.2xlarge"  : { "Arch" : "64" },
+      "m2.4xlarge"  : { "Arch" : "64" },
+      "m3.xlarge"   : { "Arch" : "64" },
+      "m3.2xlarge"  : { "Arch" : "64" },
+      "c1.medium"   : { "Arch" : "64" },
+      "c1.xlarge"   : { "Arch" : "64" }
+    },
+
+    "AWSRegionArch2AMI" : {
+      "us-east-1"      : { "32" : "ami-aba768c2", "64" : "ami-81a768e8" },
+      "us-west-1"      : { "32" : "ami-458fd300", "64" : "ami-b18ed2f4" },
+      "us-west-2"      : { "32" : "ami-fcff72cc", "64" : "ami-feff72ce" },
+      "eu-west-1"      : { "32" : "ami-018bb975", "64" : "ami-a0e81fd7" },
+      "sa-east-1"      : { "32" : "ami-a039e6bd", "64" : "ami-a239e6bf" },
+      "ap-southeast-1" : { "32" : "ami-425a2010", "64" : "ami-5e5a200c" },
+      "ap-southeast-2" : { "32" : "ami-b3990e89", "64" : "ami-bd990e87" },
+      "ap-northeast-1" : { "32" : "ami-7871c579", "64" : "ami-7671c577" }
+    }
+  },
+
+  "Resources" : {
+  
+   "Ec2Cagent": {
+         "Type": "AWS::IAM::Role",
+         "Properties": {
+            "AssumeRolePolicyDocument": {
+               "Version" : "2012-10-17",
+               "Statement": [ {
+                  "Effect": "Allow",
+                  "Principal": {
+                     "Service": [ "ec2.amazonaws.com" ]
+                  },
+                  "Action": [ "sts:AssumeRole" ]
+               } ]
+            },
+            "Path": "/",
+            "Policies": [ {
+               "PolicyName": "ec2cagent",
+               "PolicyDocument": {
+                  "Version" : "2012-10-17",
+                  "Statement": [ {
+                     "Effect": "Allow",
+                     "Action": [
+                               "sqs:GetQueueAttributes",
+                               "sqs:GetQueueUrl",
+                               "sqs:ListQueues",
+                               "sqs:ChangeMessageVisibility",
+                               "sqs:ChangeMessageVisibilityBatch",
+                               "sqs:SendMessage",
+                               "sqs:SendMessageBatch"
+							   ],
+                     "Resource" : [ {
+                               "Fn::Join": ["", ["arn:aws:sqs:*:*:", {"Ref" : "QueuePrefix"}, "_facts"]] },
+                                { "Fn::Join": ["", ["arn:aws:sqs:*:*:", {"Ref" : "QueuePrefix"}, "_agent"]]
+                                 } ]
+								  
+						        } ]
+               }
+               } ]
+            }
+         },
+
+         "Ec2CagentInstanceProfile": {
+         "Type": "AWS::IAM::InstanceProfile",
+         "Properties": {
+            "Path": "/",
+            "Roles": [ {
+               "Ref": "Ec2Cagent"
+            } ]
+         }
+      },
+  
+    "WebServerGroup" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
+      "Properties" : {
+        "AvailabilityZones" : { "Fn::GetAZs" : "" },
+        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+        "MinSize": { "Ref": "MinNumInstances" },
+        "MaxSize": { "Ref": "MaxNumInstances" },	
+		"DesiredCapacity": { "Ref": "DesiredNumInstances" }
+      }
+    },
+
+    "LaunchConfig" : {
+      "Type" : "AWS::AutoScaling::LaunchConfiguration",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" },
+                                          "Arch" ] } ] },
+        "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+        "InstanceType" : { "Ref" : "InstanceType" },
+		"IamInstanceProfile" : { "Ref" : "Ec2CagentInstanceProfile" }
+      }
+    },
+
+
+    "InstanceSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable SSH access and HTTP access on the configured port",
+        "SecurityGroupIngress" : 
+          [ { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : { "Ref" : "SSHLocation"} }]
+      }
+    }
+  }
+
+}
