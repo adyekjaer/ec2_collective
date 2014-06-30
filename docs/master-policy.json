@@ -2,22 +2,41 @@
   "Statement": [
     {
       "Action": [
-        "sqs:ListQueues",
-        "sqs:GetQueueAttributes"
+        "sqs:GetQueueUrl",
+        "sqs:DeleteMessage",
+        "sqs:ReceiveMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:ChangeMessageVisibilityBatch"
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:sqs:*:*:*"
+        "arn:aws:sqs:*:*:*_agent"
       ]
     },
     {
       "Action": [
-         "sqs:*"
+        "sqs:GetQueueUrl",
+        "sqs:ReceiveMessage",
+        "sqs:SendMessage",
+        "sqs:SendMessageBatch",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:ChangeMessageVisibilityBatch"
       ],
       "Effect": "Allow",
       "Resource": [
-        "arn:aws:sqs:*:*:*_agent",
-        "arn:aws:sqs:*:*:*_master",
+        "arn:aws:sqs:*:*:*_master"
+      ]
+    },
+{
+      "Action": [
+      "sqs:GetQueueUrl",
+      "sqs:ReceiveMessage",
+      "sqs:ChangeMessageVisibility",
+      "sqs:ChangeMessageVisibilityBatch"
+      ],
+      "Effect": "Allow",
+      "Resource": [
         "arn:aws:sqs:*:*:*_facts"
       ]
     }

@@ -105,44 +105,28 @@ Create a user for the agent with the following policy:
 
     {
       "Statement": [
-        {
-          "Action": [
-            "sqs:ListQueues",
-            "sqs:GetQueueAttributes"
-          ],
-          "Effect": "Allow",
-          "Resource": [
-            "arn:aws:sqs:*:*:*"
-          ]
-        },
-        {
-          "Action": [
-            "sqs:GetQueueAttributes",
-            "sqs:GetQueueUrl",
-            "sqs:ListQueues",
-            "sqs:ChangeMessageVisibility",
-            "sqs:ChangeMessageVisibilityBatch",
-            "sqs:SendMessage",
-            "sqs:SendMessageBatch"
-          ],
-          "Effect": "Allow",
-          "Resource": [
-            "arn:aws:sqs:*:*:*_agent",
-            "arn:aws:sqs:*:*:*_facts"
-          ]
-        },
-     {
-          "Action": [
-            "sqs:GetQueueAttributes",
-            "sqs:GetQueueUrl",
-            "sqs:ListQueues",
-            "sqs:ReceiveMessage"
-          ],
-          "Effect": "Allow",
-          "Resource": [
-            "arn:aws:sqs:*:*:*_master"
-          ]
-        }
+      {
+        "Action": [
+          "sqs:GetQueueUrl",
+          "sqs:SendMessage",
+          "sqs:SendMessageBatch"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+          "arn:aws:sqs:*:*:*_agent",
+          "arn:aws:sqs:*:*:*_facts"
+        ]
+      },
+      {
+        "Action": [
+          "sqs:GetQueueUrl",
+          "sqs:ReceiveMessage"
+        ],
+        "Effect": "Allow",
+        "Resource": [
+          "arn:aws:sqs:*:*:*_master"
+        ]
+      }
       ]
     }
 
@@ -152,22 +136,41 @@ Create a user for the master 'publisher' tool:
       "Statement": [
         {
           "Action": [
-            "sqs:ListQueues",
-            "sqs:GetQueueAttributes"
+            "sqs:GetQueueUrl",
+            "sqs:DeleteMessage",
+            "sqs:ReceiveMessage",
+            "sqs:ChangeMessageVisibility",
+            "sqs:ChangeMessageVisibilityBatch"
           ],
           "Effect": "Allow",
           "Resource": [
-            "arn:aws:sqs:*:*:*"
+            "arn:aws:sqs:*:*:*_agent"
           ]
         },
         {
           "Action": [
-             "sqs:*"
+            "sqs:GetQueueUrl",
+            "sqs:ReceiveMessage",
+            "sqs:SendMessage",
+            "sqs:SendMessageBatch",
+            "sqs:DeleteMessage",
+            "sqs:ChangeMessageVisibility",
+            "sqs:ChangeMessageVisibilityBatch"
           ],
           "Effect": "Allow",
           "Resource": [
-            "arn:aws:sqs:*:*:*_agent",
-            "arn:aws:sqs:*:*:*_master",
+            "arn:aws:sqs:*:*:*_master"
+          ]
+        },
+    {
+          "Action": [
+          "sqs:GetQueueUrl",
+          "sqs:ReceiveMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:ChangeMessageVisibilityBatch"
+          ],
+          "Effect": "Allow",
+          "Resource": [
             "arn:aws:sqs:*:*:*_facts"
           ]
         }
@@ -198,11 +201,15 @@ Edit your ec2-cagent.json according to your queues and fact file locations.
         "general": {
             "log_level": "INFO",
             "sqs_poll_interval": 1,
-            "queue_poll_interval": 0.1,
-            "yaml_facts": true,
-            "yaml_facts_path": [ "/etc/ec2_collective/facts.yaml", "/var/lib/puppet/state/classes.txt" ],
-            "yaml_facts_refresh": 30,
-            "use_facts_queue": true
+            "queue_poll_interval": 0.1
+        },
+        "facts": {
+            "enabled": true,
+            "refresh": 60,
+            "use_queue": true,
+            "use_facter": true,
+            "facter_cmd": "facter --puppet --yaml 2> /dev/null",
+            "facts_path": ["/var/lib/puppet/state/classes.txt", "/path/to/some/other/file"]
         },
         "aws": {
             "region": "eu-west-1",
