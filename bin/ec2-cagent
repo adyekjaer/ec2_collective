@@ -245,6 +245,8 @@ def system_exec (cmd):
         output = ('Failed to execute: %s (%d) %s' % (cmd, e.errno, e.strerror))
         rc = e.errno
 
+    logging.debug('output: %s, rc: %d' % (output, rc))
+
     return (output, rc)
 
 def cli_mode (message):
