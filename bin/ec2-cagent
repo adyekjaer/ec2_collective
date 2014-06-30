@@ -195,11 +195,11 @@ def get_yaml_facts_worker ():
         for yaml_file in valid_yaml_files:
             logging.debug('Will load facts from ' + str(yaml_file))
 
-            f = open(yaml_file, 'r')
             try:
+                f = open(yaml_file, 'r')
                 data_from_file = yaml.safe_load(f)
             except:
-                logging.error('Error while loading yaml from file (format problems) ' + str(yaml_file))
+                logging.error('Error while loading yaml from file: %s' % (yaml_file))
                 continue
 
             if type(data_from_file) is str:
@@ -308,8 +308,7 @@ def message_history(initialize=False, read_msgs={}):
             read_msgs = cPickle.load(history_fh)
             history_fh.close()
         except:
-            logging.error ('Failed to re-read-cache file %s - will try to remove file' %  (history_file))
-            os.remove(history_file)
+            logging.error ('Failed to re-read-cache file %s' %  (history_file))
 
     # Clear references to old messages ( keep messages until we haven't done anything for 2 minutes )
     # AWS SQS queues must have this setting
@@ -329,8 +328,7 @@ def message_history(initialize=False, read_msgs={}):
         cPickle.dump( read_msgs, history_fh )
         history_fh.close()
     except:
-        logging.error ('Failed to re-read-cache file %s - will try to remove file' %  (history_file))
-        os.remove(history_file)
+        logging.error ('Failed to re-read-cache file %s' %  (history_file))
 
     return read_msgs
 
