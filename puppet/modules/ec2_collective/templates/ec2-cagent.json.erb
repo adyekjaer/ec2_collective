@@ -2,14 +2,18 @@
     "general": {
         "log_level": "<%= @log_level %>",
         "sqs_poll_interval": 1,
-        "queue_poll_interval": 0.1,
-        "yaml_facts": true,
-        "yaml_facts_path": [
+        "queue_poll_interval": 0.1
+    },
+    "facts": { 
+        "enabled": true,
+        "refresh": 60,
+        "use_queue": true,
+        "use_facter": true,
+        "facter_cmd": "facter --puppet --yaml 2> /dev/null",
+        "facts_path": [
             <% @fact_files.each_with_index do |file, i| -%>
             "<%= file %>"<%= ',' if i < (fact_files.size - 1) %>
-            <% end -%>],
-        "yaml_facts_refresh": 30,
-        "use_facts_queue": true
+            <% end -%>]
     },
     "aws": {
         "region": "eu-west-1",
