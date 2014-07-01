@@ -6,7 +6,7 @@
     },
     "facts": { 
         "enabled": true,
-        "refresh": 60,
+        "refresh": 30,
         "use_queue": true,
         "use_facter": true,
         "facter_cmd": "facter --puppet --yaml 2> /dev/null",
